@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-import {scanDomain, getDomainPath} from './scanner';
+import {scanDomain, getDomainPath, RegistrySnapshot} from './scanner';
 import {existsSync} from 'fs';
 import {join, resolve} from 'path';
 import {fileURLToPath} from 'url';
@@ -44,10 +44,11 @@ async function main() {
   if (!contextName) {
     console.error(`Command "${commandName}" not found in any context.`);
     console.error('\nAvailable commands:');
-    for (const [ctx, {commands}] of Object.entries(domainScan)) {
-      if (commands.length > 0) {
+    for (const ctx of domainScan.contexts) {
+      const contextCommands = Array.from(domainScan.commands).filter(cmd => cmd.startsWith(ctx + '.'));
+      if (contextCommands.length > 0) {
         console.error(`  ${ctx}:`);
-        commands.forEach(cmd => console.error(`    - ${cmd}`));
+        contextCommands.forEach(cmd => console.error(`    - ${cmd}`));
       }
     }
     process.exit(1);
@@ -98,9 +99,9 @@ async function main() {
   }
 }
 
-function findContextForCommand(commandName: string, domainScan: Record<string, {commands: string[]}>) {
-  for (const [context, {commands}] of Object.entries(domainScan)) {
-    if (commands.includes(commandName)) {
+function findContextForCommand(commandName: string, snapshot: RegistrySnapshot): string | null {
+  for (const context of snapshot.contexts) {
+    if (Array.from(snapshot.commands).some(cmd => cmd === commandName || cmd.startsWith(context + '.' + commandName))) {
       return context;
     }
   }

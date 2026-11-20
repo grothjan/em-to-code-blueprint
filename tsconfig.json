@@ -5,6 +5,7 @@
       "@lib/*": ["lib/*"]
     },
     "module": "ESNext",
-    "moduleResolution": "Bundler"
+    "moduleResolution": "Bundler",
+    "target": "ES2020"
   }
 }

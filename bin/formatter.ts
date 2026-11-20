@@ -1,10 +1,11 @@
-import { ScanResult } from './scanner';
+import {RegistrySnapshot} from './scanner';
 
 /**
  * Formats and prints the scan result
  */
-export function printScanResult(result: ScanResult): void {
-  const contexts = Object.keys(result).sort();
+export function printScanResult(snapshot: RegistrySnapshot): void {
+  // Get contexts from the snapshot (these are PascalCase)
+  const contexts = Array.from(snapshot.contexts).sort();
   
   if (contexts.length === 0) {
     console.log('No commands or queries found in domain directory.');
@@ -12,16 +13,17 @@ export function printScanResult(result: ScanResult): void {
   }
   
   for (const context of contexts) {
-    const data = result[context];
+    // Format context name for display (PascalCase to "Context Name")
     const contextName = formatContextName(context);
     
     console.log(`\n${contextName}`);
     console.log('─'.repeat(contextName.length));
     
     // Commands
-    if (data.commands.length > 0) {
+    const contextCommands = Array.from(snapshot.commands).filter(cmd => cmd.startsWith(context + '.')).sort();
+    if (contextCommands.length > 0) {
       console.log('\nCommands:');
-      for (const command of data.commands.sort()) {
+      for (const command of contextCommands) {
         console.log(`  • ${command}`);
       }
     } else {
@@ -29,9 +31,10 @@ export function printScanResult(result: ScanResult): void {
     }
     
     // Queries
-    if (data.queries.length > 0) {
+    const contextQueries = Array.from(snapshot.queries).filter(q => q.startsWith(context + '.')).sort();
+    if (contextQueries.length > 0) {
       console.log('\nQueries:');
-      for (const query of data.queries.sort()) {
+      for (const query of contextQueries) {
         console.log(`  • ${query}`);
       }
     } else {
@@ -43,11 +46,8 @@ export function printScanResult(result: ScanResult): void {
 }
 
 /**
- * Formats context name for display (e.g., "task-management" -> "Task Management")
+ * Formats context name for display (e.g., "TaskManagement" -> "Task Management")
  */
 function formatContextName(name: string): string {
-  return name
-    .split('-')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+  return name.replace(/([a-z])([A-Z])/g, '$1 $2');
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-import {scanDomain, getDomainPath} from './scanner';
+import {scanDomain, getDomainPath, RegistrySnapshot} from './scanner';
 import {existsSync} from 'fs';
 import {join, resolve} from 'path';
 import {fileURLToPath} from 'url';
@@ -44,10 +44,11 @@ async function main() {
   if (!contextName) {
     console.error(`Query "${queryName}" not found in any context.`);
     console.error('\nAvailable queries:');
-    for (const [ctx, {queries}] of Object.entries(domainScan)) {
-      if (queries.length > 0) {
+    for (const ctx of domainScan.contexts) {
+      const contextQueries = Array.from(domainScan.queries).filter(q => q.startsWith(ctx + '.'));
+      if (contextQueries.length > 0) {
         console.error(`  ${ctx}:`);
-        queries.forEach(q => console.error(`    - ${q}`));
+        contextQueries.forEach(q => console.error(`    - ${q}`));
       }
     }
     process.exit(1);
@@ -98,9 +99,9 @@ async function main() {
   }
 }
 
-function findContextForQuery(queryName: string, domainScan: Record<string, {queries: string[]}>) {
-  for (const [context, {queries}] of Object.entries(domainScan)) {
-    if (queries.includes(queryName)) {
+function findContextForQuery(queryName: string, snapshot: RegistrySnapshot): string | null {
+  for (const context of snapshot.contexts) {
+    if (Array.from(snapshot.queries).some(q => q === queryName || q.startsWith(context + '.' + queryName))) {
       return context;
     }
   }

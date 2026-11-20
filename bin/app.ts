@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-import { scanDomain, getDomainPath, ScanResult } from './scanner';
+import { scanDomain, getDomainPath, RegistrySnapshot } from './scanner';
 import { printScanResult } from './formatter';
 import { existsSync } from 'fs';
 import { join, resolve } from 'path';
@@ -16,7 +16,7 @@ const require = createRequire(__filename);
 
 initializeMessageFactory(new MachineClock(), new CryptoUuidGenerator());
 
-async function handleCommand(args: string[], scanResult: ScanResult): Promise<void> {
+async function handleCommand(args: string[], snapshot: RegistrySnapshot): Promise<void> {
   if (args.length < 2) {
     console.error('Usage: app handle <command-name> <json-payload>');
     console.error('Example: app handle TaskManagement.AddTodo \'{"title":"Test","description":"Test description"}\'');
@@ -35,15 +35,17 @@ async function handleCommand(args: string[], scanResult: ScanResult): Promise<vo
   }
 
   const domainPath = getDomainPath();
-  const contextName = findContextForCommand(commandName, scanResult);
+  const contextName = findContextForCommand(commandName, snapshot);
 
   if (!contextName) {
     console.error(`Command "${commandName}" not found in any context.`);
     console.error('\nAvailable commands:');
-    for (const [ctx, { commands }] of Object.entries(scanResult)) {
-      if (commands.length > 0) {
+    // Get commands filtered by context
+    for (const ctx of snapshot.contexts) {
+      const contextCommands = Array.from(snapshot.commands).filter(cmd => cmd.startsWith(ctx + '.'));
+      if (contextCommands.length > 0) {
         console.error(`  ${ctx}:`);
-        commands.forEach(cmd => console.error(`    - ${cmd}`));
+        contextCommands.forEach(cmd => console.error(`    - ${cmd}`));
       }
     }
     process.exit(1);
@@ -89,7 +91,7 @@ async function handleCommand(args: string[], scanResult: ScanResult): Promise<vo
   }
 }
 
-async function resolveQuery(args: string[], scanResult: ScanResult): Promise<void> {
+async function resolveQuery(args: string[], snapshot: RegistrySnapshot): Promise<void> {
   if (args.length < 2) {
     console.error('Usage: app resolve <query-name> <json-payload>');
     console.error('Example: app resolve TaskManagement.TodoList \'{"status": "open"}\'');
@@ -108,15 +110,17 @@ async function resolveQuery(args: string[], scanResult: ScanResult): Promise<voi
   }
 
   const domainPath = getDomainPath();
-  const contextName = findContextForQuery(queryName, scanResult);
+  const contextName = findContextForQuery(queryName, snapshot);
 
   if (!contextName) {
     console.error(`Query "${queryName}" not found in any context.`);
     console.error('\nAvailable queries:');
-    for (const [ctx, { queries }] of Object.entries(scanResult)) {
-      if (queries.length > 0) {
+    // Get queries filtered by context
+    for (const ctx of snapshot.contexts) {
+      const contextQueries = Array.from(snapshot.queries).filter(q => q.startsWith(ctx + '.'));
+      if (contextQueries.length > 0) {
         console.error(`  ${ctx}:`);
-        queries.forEach(q => console.error(`    - ${q}`));
+        contextQueries.forEach(q => console.error(`    - ${q}`));
       }
     }
     process.exit(1);
@@ -162,18 +166,18 @@ async function resolveQuery(args: string[], scanResult: ScanResult): Promise<voi
   }
 }
 
-function findContextForCommand(commandName: string, scanResult: ScanResult): string | null {
-  for (const [context, { commands }] of Object.entries(scanResult)) {
-    if (commands.includes(commandName)) {
+function findContextForCommand(commandName: string, snapshot: RegistrySnapshot): string | null {
+  for (const context of snapshot.contexts) {
+    if (Array.from(snapshot.commands).some(cmd => cmd === commandName || cmd.startsWith(context + '.' + commandName))) {
       return context;
     }
   }
   return null;
 }
 
-function findContextForQuery(queryName: string, scanResult: ScanResult): string | null {
-  for (const [context, { queries }] of Object.entries(scanResult)) {
-    if (queries.includes(queryName)) {
+function findContextForQuery(queryName: string, snapshot: RegistrySnapshot): string | null {
+  for (const context of snapshot.contexts) {
+    if (Array.from(snapshot.queries).some(q => q === queryName || q.startsWith(context + '.' + queryName))) {
       return context;
     }
   }
