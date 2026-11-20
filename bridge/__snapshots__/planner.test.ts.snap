@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Planner > Snapshot test for stable output > should produce consistent output for a typical slice 1`] = `
+{
+  "actions": [
+    {
+      "context": "Crm",
+      "key": "context:Crm",
+      "kind": "context",
+    },
+    {
+      "context": "Crm",
+      "key": "information:Crm.User",
+      "kind": "information",
+      "name": "User",
+    },
+    {
+      "context": "Crm",
+      "eventFqcn": "Crm.UserCreated",
+      "infoFqcn": "Crm.User",
+      "key": "prjcase:Crm.User<-Crm.UserCreated",
+      "kind": "prjcase",
+      "name": "User",
+      "targetName": "UserCreated",
+      "targetType": "event",
+    },
+    {
+      "context": "Crm",
+      "hint": "Add the command to the Event Model",
+      "key": "blocked:Crm.UserCreated",
+      "kind": "blocked",
+      "name": "UserCreated",
+      "reason": "no command source in the Event Model",
+    },
+  ],
+  "notes": [],
+}
+`;

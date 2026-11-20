@@ -35,10 +35,19 @@ export interface BoardComment {
   };
 }
 
+// Dependency node - source or target of a link
+export interface DependencyNode {
+  id: string;
+  type: BoardElementType;
+  name: string;
+  context: string;
+  chapterId: string;
+}
+
 export interface DependencyGraph {
   element: BoardElement;
-  sources: BoardElement[];
-  targets: BoardElement[];
+  sources: DependencyNode[];
+  targets: DependencyNode[];
 }
 
 // Registry snapshot - what already exists in the blueprint
@@ -69,6 +78,7 @@ export interface Action {
   kind: ActionKind;
   key: string; // e.g., "command:Crm.CreateUser" or "prjcase:Crm.UserList<-Crm.UserCreated"
   context?: string; // PascalCase context name
+  name?: string; // PascalCase name (for command, event, information, blocked)
   command?: string; // for command actions
   event?: string; // for event actions
   commandName?: string; // for event actions (command name without context)
@@ -76,8 +86,13 @@ export interface Action {
   information?: string; // for information/prjcase actions
   automation?: string; // for on/job actions
   targetContext?: string; // for cross-context links
+  targetType?: 'event' | 'command' | 'information' | 'automation'; // for prjcase, on, job
+  targetName?: string; // PascalCase target name
   reason?: string; // for blocked actions
   hint?: string; // for blocked actions
+  eventFqcn?: string; // for prjcase/on: event FQCN
+  infoFqcn?: string; // for prjcase/job: information FQCN
+  autoFqcn?: string; // for on/job: automation FQCN
   files?: string[]; // generated file paths
   registryFile?: string; // registry file path
 }
