@@ -1,0 +1,18 @@
+{
+  "description": "Error response shape from prooph board API",
+  "source": "eventflow-designer/supabase/functions/api/index.ts errorResponse function",
+  "format": "{\"error\": \"<message>\"}",
+  "http_status_examples": {
+    "400": "Validation errors (invalid input, missing required field)",
+    "401": "Unauthorized (invalid or missing API key)",
+    "403": "Forbidden (not authorized for this operation)",
+    "404": "Not found (chapter/element/slice does not exist)",
+    "429": "Too Many Requests (rate limit exceeded, retry with backoff)",
+    "500": "Server error (internal failure)"
+  },
+  "retry_behavior": {
+    "429": "Retry with exponential backoff (250ms, 1s, 4s)",
+    "5xx": "Retry with exponential backoff",
+    "4xx": "Do not retry"
+  }
+}

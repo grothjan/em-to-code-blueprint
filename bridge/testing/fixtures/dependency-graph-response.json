@@ -1,0 +1,65 @@
+{
+  "description": "Dependency graph response from buildDependencyGraph utility",
+  "source": "eventflow-designer/supabase/functions/_shared/dependencyGraphUtils.ts",
+  "endpoint": "GET /api/chapters/{chapter_id}/elements/{element_id}/dependency-graph",
+  "example_response": {
+    "element": {
+      "id": "element-uuid",
+      "type": "event",
+      "name": "UserCreated",
+      "description": "User account was successfully created",
+      "details": "",
+      "icon": "check-circle",
+      "laneId": "lane-uuid",
+      "sliceId": "slice-uuid",
+      "context": "App",
+      "chapterId": "chapter-uuid",
+      "chapterName": "Event Modeling",
+      "chapterIndex": 0
+    },
+    "sources": [
+      {
+        "id": "command-uuid",
+        "type": "command",
+        "name": "CreateUser",
+        "description": "Create a new user account",
+        "details": "",
+        "icon": "user-plus",
+        "laneId": "lane-uuid",
+        "sliceId": "slice-uuid",
+        "context": "App",
+        "chapterId": "chapter-uuid",
+        "chapterName": "Event Modeling",
+        "sliceStatus": "planned"
+      }
+    ],
+    "targets": [
+      {
+        "id": "information-uuid",
+        "type": "information",
+        "name": "UserRepository",
+        "description": "Repository for user data",
+        "details": "",
+        "icon": "database",
+        "laneId": "information-flow-lane-uuid",
+        "sliceId": "slice-uuid",
+        "context": "App",
+        "chapterId": "chapter-uuid",
+        "chapterName": "Event Modeling",
+        "sliceStatus": "planned"
+      }
+    ]
+  },
+  "semantics": {
+    "sources": "Elements that flow INTO this element (e.g., command -> event)",
+    "targets": "Elements that flow FROM this element (e.g., event -> information projection)",
+    "deduplication": "Per chapter by type+name+context, NOT by element id",
+    "cross_chapter": "Same logical element in other chapters appears in sources/targets"
+  },
+  "relevant_combinations": [
+    "command -> event (event's sources contain the command)",
+    "event -> information (projection)",
+    "event -> automation (event automation)",
+    "information -> automation (job automation)"
+  ]
+}

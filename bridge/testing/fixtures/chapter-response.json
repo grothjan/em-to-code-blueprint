@@ -1,0 +1,71 @@
+{
+  "description": "Chapter response from get_chapter tool",
+  "source": "eventflow-designer/supabase/functions/_shared/tools.ts get_chapter handler",
+  "endpoint": "GET /api/chapters/{chapter_id}?slice_ids={slice_id}&structure_only=true",
+  "example_response": {
+    "id": "chapter-uuid",
+    "name": "Chapter Name",
+    "index": 0,
+    "context": "App",
+    "mode": "event-modeling",
+    "lanes": [
+      {
+        "id": "lane-uuid",
+        "label": "User Role",
+        "type": "user-lane",
+        "height": 180,
+        "icon": "users",
+        "index": 0,
+        "details": null
+      }
+    ],
+    "slices": [
+      {
+        "id": "slice-uuid",
+        "label": "Slice 1",
+        "width": 250,
+        "index": 0,
+        "status": "planned",
+        "comments": [],
+        "details": null
+      }
+    ],
+    "elements": [
+      {
+        "id": "element-uuid",
+        "type": "command",
+        "name": "CreateUser",
+        "description": "Create a new user account",
+        "details": "",
+        "icon": "user-plus",
+        "laneId": "lane-uuid",
+        "sliceId": "slice-uuid",
+        "index": 0,
+        "comments": [],
+        "context": "App"
+      },
+      {
+        "id": "element-uuid",
+        "type": "event",
+        "name": "UserCreated",
+        "description": "User account was successfully created",
+        "details": "",
+        "icon": "check-circle",
+        "laneId": "lane-uuid",
+        "sliceId": "slice-uuid",
+        "index": 1,
+        "comments": [],
+        "context": "App"
+      }
+    ]
+  },
+  "structure_only_behavior": {
+    "lanes": "details field omitted when structure_only=true",
+    "slices": "details field omitted when structure_only=true",
+    "elements": "playFunction and playType omitted when structure_only=true"
+  },
+  "slice_ids_filtering": {
+    "description": "Elements are filtered to only those in the specified slice(s)",
+    "lanes_and_slices": "Always returned in full, regardless of slice_ids filter"
+  }
+}

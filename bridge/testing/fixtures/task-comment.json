@@ -1,0 +1,34 @@
+{
+  "description": "Task comment creation and resolution",
+  "source": "eventflow-designer/supabase/functions/_shared/tools.ts add_element_comment and resolve_task handlers",
+  "create_endpoint": "POST /api/chapters/{chapter_id}/elements/{element_id}/comments",
+  "create_body": {
+    "text": "Task comment text",
+    "is_task": true
+  },
+  "create_response": {
+    "commentId": "uuid",
+    "text": "Task comment text",
+    "createdAt": 1730000000000,
+    "isTask": true
+  },
+  "task_comment_structure": {
+    "id": "UUID of the comment",
+    "text": "Comment content",
+    "author": "Display name of creator",
+    "userId": "UUID of creator",
+    "createdAt": "Unix timestamp",
+    "isTask": true
+  },
+  "resolution_endpoint": "POST /api/chapters/{chapter_id}/elements/{element_id}/comments/{comment_id}/resolve",
+  "resolution_behavior": {
+    "removes_comment": "True - the task comment is removed from the element's comments array",
+    "audit_log": "The removal is recorded as 'Task resolved' in the changelog",
+    "non_task_rejection": "Attempting to resolve a non-task comment throws ValidationError",
+    "is_task_field": "Must be exactly true (boolean), not just truthy"
+  },
+  "idempotency": {
+    "description": "Running the same action twice doesn't create duplicate comments or task comments",
+    "method": "Check existing comments for the same marker before creating"
+  }
+}

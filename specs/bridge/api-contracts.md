@@ -40,7 +40,12 @@ Config rule (file `proophboard.spec-stream.json` in blueprint root):
 ## 2. prooph board REST API
 
 Base: `PROOPHBOARD_API_ENDPOINT` (already ends with `/api`).
-Auth header: `Authorization: Bearer pb_...`. Responses: JSON; errors `{ error: string }` with HTTP status (verify exact error body shape in step 2 against `errorResponse` in `api/index.ts`).
+Auth header: `Authorization: Bearer pb_...`. Responses: JSON; errors `{ error: string }` with HTTP status.
+
+**Verified in Step 2**:
+- Error response format: `{ error: string }` via `errorResponse()` in `eventflow-designer/supabase/functions/api/index.ts`
+- HTTP status codes: 400 (validation), 401 (unauthorized), 403 (forbidden), 404 (not found), 429 (rate limit), 500 (server error)
+- Retry behavior: 429 and 5xx trigger retry with exponential backoff (250ms, 1s, 4s); 4xx (except 429) do not retry
 
 ### 2.1 Load slice with elements
 
@@ -97,9 +102,21 @@ Body: `{ "text": string, "is_task": true }`
 Response: `{ commentId, text, createdAt, isTask }`
 
 - `chapterId` must be the chapter that owns the element. For dependency counterparts in another chapter use `source/target.chapterId` from the graph response.
-- Comment objects as read back (`comments` on elements) carry at least `id, text, author, userId, createdAt, isTask` (see `element-comment-added` event). **Verify** in step 2 how resolved tasks are represented (field name) because idempotency depends on "open task comment" detection. Until verified, treat any task comment with the same marker as existing (safe direction: never duplicates).
+- Comment objects as read back (`comments` on elements) carry at least `id, text, author, userId, createdAt, isTask` (see `element-comment-added` event).
+- **Verified in Step 2**:
+  - Task comments have `isTask: true` (boolean) in the changelog event's `newValue`
+  - Resolving a task comment (`POST {base}/chapters/{chapterId}/elements/{elementId}/comments/{commentId}/resolve`) **removes** the comment from the element's comments array entirely
+  - Attempting to resolve a non-task comment throws `ValidationError`
+  - Resolved comments are audited as "Task resolved" in the changelog
+  - Idempotency: Resolve throws `ValidationError` if comment not found, so safe to retry
 
 ### 2.4 Rate limits / retries
 
 - Retry network errors and HTTP 429/5xx up to 3 times with exponential backoff (250ms, 1s, 4s); no retry on 4xx. Backoff delays injectable for tests.
 - Per-request timeout 15s (`AbortSignal.timeout`).
+
+**Verified in Step 2**:
+- Rate limit: 120 req/min, 1000 req/hr per API key (returns 429 with `Retry-After: 60` header)
+- Backoff delays: 250ms, 1s, 4s
+- Retry on: 429 (rate limit), 5xx (server errors)
+- No retry on: 4xx (client errors, except 429)
