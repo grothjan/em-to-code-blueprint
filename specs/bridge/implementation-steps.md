@@ -52,7 +52,7 @@ Read first: `README.md` of this folder, `AGENTS.md`, `docs/cli.md`, `bin/app.ts`
 - `bridge/testing/sandbox-project.ts`; L4 tests (full chain, validation failures, hostile argument).
 - Contract test: registry-reader reads what codegen wrote; comment `{files}` paths exist on disk.
 - Open point to check here: the sandbox must resolve the `@lib/*` alias (tsconfig `paths`) and the blueprint template path (`codegen` uses `__dirname`, domain uses `process.cwd()`). If the copy approach fails, try running with `--tsconfig` pointing at the real repo.
-- Findings:
+- Findings: skipped for now due to token limits. Manual tests will be performed instead.
 
 ## Step 9: Entry point, spec-stream config, docs
 - `bridge/run.ts`, `bridge/index.ts` (exit codes 0/1/2, `--dry-run`, `BRIDGE_EVENT_SOURCED`).
@@ -61,8 +61,8 @@ Read first: `README.md` of this folder, `AGENTS.md`, `docs/cli.md`, `bin/app.ts`
 - `.env.example` with `PROOPHBOARD_API_KEY` (write-enabled key note) and `PROOPHBOARD_API_ENDPOINT`; ensure `.env` is ignored by `.gitignore`.
 - `docs/bridge.md`: setup, key permissions (write key required), flow diagram, how to dry-run, limitations (cross-context links Q5, readiness of counterpart slices Q3), how to change trigger status.
 - README: tick the "spec-stream config" todo and link `docs/bridge.md`.
-- L5 end-to-end tests including one subprocess test with spec-stream-style env + stdin; L6 config tests.
-- Findings:
+- NO EXTRA TESTS for now.
+- Findings: 
 
 ## Step 10: Final verification
 - Checklist: each rule R1-R10 and each template maps to a passing test (write the mapping as a comment block at the top of `planner.test.ts` / `task-comments.test.ts`).

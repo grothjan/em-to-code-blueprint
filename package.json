@@ -29,7 +29,8 @@
   },
   "scripts": {
     "ts:check": "npx tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest",
+    "bridge": "tsx bridge/index.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

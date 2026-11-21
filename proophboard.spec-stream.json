@@ -1,0 +1,23 @@
+{
+  "endpoint": "https://flow.prooph-board.com/api",
+  "env": {
+    "PROOPHBOARD_API_ENDPOINT": "https://flow.prooph-board.com/api"
+  },
+  "rules": [
+    {
+      "id": "slice-to-blueprint",
+      "on": "slice-status-changed",
+      "when": {
+        "data": {
+          "newValue.status": ["planned"]
+        }
+      },
+      "run": "npx tsx bridge/index.ts \"$SPEC_STREAM_SLICE_ID\"",
+      "timeout": 600000,
+      "concurrency": {
+        "key": "global",
+        "mode": "queue"
+      }
+    }
+  ]
+}

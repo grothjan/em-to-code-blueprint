@@ -107,4 +107,4 @@ Open a [GitHub Issue](https://github.com/proophboard/em-to-code-blueprint/issues
 - [ ] Frontend Guidance
 - [ ] External Events
 - [ ] Public context method to consume external events
-- [ ] [spec-stream](https://github.com/proophboard/spec-stream) config
+- [x] [spec-stream](https://github.com/proophboard/spec-stream) config — see [docs/bridge.md](docs/bridge.md)
