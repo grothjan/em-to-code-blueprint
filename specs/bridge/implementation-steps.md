@@ -41,11 +41,11 @@ Read first: `README.md` of this folder, `AGENTS.md`, `docs/cli.md`, `bin/app.ts`
 ## Step 6: Prooph client
 - `bridge/prooph-client.ts` (fetch, retry/backoff injectable, timeout, redaction) + `bridge/testing/fake-prooph-server.ts` + L2 tests.
 - Accept: no test mocks `fetch`; key never appears in thrown messages or logs.
-- Findings:
+- Findings: `get_chapter` slices/elements carry no `chapterId`; the client sets it from the requested chapterId. Retry/timeout tests use real timers with tiny injected backoffs (fake timers block real HTTP + AbortSignal). Fake server exposes `failNext(status, n)` for retry scenarios. Fixtures are inline in `fake-prooph-server.ts`; move to `testing/fixtures/` when real captures exist.
 
 ## Step 7: Codegen runner and executor
 - `bridge/codegen-runner.ts` (`child_process.execFile`/`spawn` with arg array, `cwd`, timeout, no shell; command `npx tsx bin/app.ts codegen ...` or the local `node_modules/.bin/tsx`).
-- `bridge/executor.ts` per "Executor semantics" in `planning-rules.md`; L3 tests with fakes.
+- `bridge/executor.ts` per "Executor semantics" in `planning-rules.md`; NO EXTRA TESTS for now.
 - Findings:
 
 ## Step 8: Sandbox + codegen integration tests
