@@ -159,7 +159,8 @@ function generateForElement(
         kind: 'command',
         key: `command:${fqcn}`,
         context: contextPascal,
-        name: namePascal
+        name: namePascal,
+        command: namePascal,
       });
       break;
 
@@ -179,7 +180,8 @@ function generateForElement(
               kind: 'command',
               key: `command:${cmdFqcn}`,
               context: cmdContextPascal,
-              name: cmdNamePascal
+              name: cmdNamePascal,
+              command: cmdNamePascal,
             });
           }
 
@@ -188,6 +190,8 @@ function generateForElement(
             key: `event:${fqcn}`,
             context: contextPascal,
             name: namePascal,
+            event: namePascal,
+            command: cmdNamePascal,
             targetType: 'command',
             targetName: cmdNamePascal,
             eventFqcn: fqcn
@@ -221,7 +225,8 @@ function generateForElement(
         kind: 'information',
         key: `information:${fqcn}`,
         context: contextPascal,
-        name: namePascal
+        name: namePascal,
+        information: namePascal,
       });
       break;
 
@@ -417,6 +422,7 @@ function createPrjCaseAction(
       key: `information:${infoFqcn}`,
       context: infoContextPascal,
       name: infoName,
+      information: infoName,
     });
   }
 
@@ -425,6 +431,8 @@ function createPrjCaseAction(
     key: `prjcase:${infoFqcn}<-${eventFqcn}`,
     context: contextPascal,
     name: infoName,
+    information: infoName,
+    event: eventFqcn.split('.')[1],
     targetType: 'event',
     targetName: eventFqcn.split('.')[1],
     eventFqcn,
@@ -493,6 +501,8 @@ function createOnAction(
     key: `on:${autoFqcn}<-${eventFqcn}`,
     context: contextPascal,
     name: autoFqcn.split('.')[1],
+    automation: autoFqcn.split('.')[1],
+    event: eventFqcn.split('.')[1],
     targetType: 'event',
     targetName: eventFqcn.split('.')[1],
     eventFqcn,
@@ -553,6 +563,8 @@ function createJobAction(
     key: `job:${autoFqcn}<-${infoFqcn}`,
     context: contextPascal,
     name: autoFqcn.split('.')[1],
+    automation: autoFqcn.split('.')[1],
+    information: infoFqcn.split('.')[1],
     targetType: 'information',
     targetName: infoFqcn.split('.')[1],
     infoFqcn,

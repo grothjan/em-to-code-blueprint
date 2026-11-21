@@ -10,14 +10,17 @@ exports[`Planner > Snapshot test for stable output > should produce consistent o
     },
     {
       "context": "Crm",
+      "information": "User",
       "key": "information:Crm.User",
       "kind": "information",
       "name": "User",
     },
     {
       "context": "Crm",
+      "event": "UserCreated",
       "eventFqcn": "Crm.UserCreated",
       "infoFqcn": "Crm.User",
+      "information": "User",
       "key": "prjcase:Crm.User<-Crm.UserCreated",
       "kind": "prjcase",
       "name": "User",
