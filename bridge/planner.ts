@@ -293,7 +293,7 @@ function generateForLinks(
   }
 
   for (const source of graph.sources) {
-    if (source.type === 'information') {
+    if (source.type === 'event') {
       const action = createPrjCaseAction(source, graph, registry, currentChapterId, contextPascal);
       if (action) {
         actions.push(action);
@@ -302,39 +302,43 @@ function generateForLinks(
   }
 
   // R6: Event -> Automation (event automation)
-  for (const target of graph.targets) {
-    if (target.type === 'automation') {
-      const action = createOnAction(graph, target, registry, currentChapterId, contextPascal);
-      if (action) {
-        actions.push(action);
+  if (graph.element.type === 'event') {
+    for (const target of graph.targets) {
+      if (target.type === 'automation') {
+        const action = createOnAction(graph, target, registry, currentChapterId, contextPascal);
+        if (action) {
+          actions.push(action);
+        }
       }
     }
-  }
 
-  for (const source of graph.sources) {
-    if (source.type === 'automation') {
-      const action = createOnAction(source, graph, registry, currentChapterId, contextPascal);
-      if (action) {
-        actions.push(action);
+    for (const source of graph.sources) {
+      if (source.type === 'automation') {
+        const action = createOnAction(source, graph, registry, currentChapterId, contextPascal);
+        if (action) {
+          actions.push(action);
+        }
       }
     }
   }
 
   // R7: Information -> Automation (job automation)
-  for (const target of graph.targets) {
-    if (target.type === 'automation') {
-      const action = createJobAction(graph, target, registry, currentChapterId, contextPascal);
-      if (action) {
-        actions.push(action);
+  if (graph.element.type === 'information') {
+    for (const target of graph.targets) {
+      if (target.type === 'automation') {
+        const action = createJobAction(graph, target, registry, currentChapterId, contextPascal);
+        if (action) {
+          actions.push(action);
+        }
       }
     }
-  }
 
-  for (const source of graph.sources) {
-    if (source.type === 'automation') {
-      const action = createJobAction(source, graph, registry, currentChapterId, contextPascal);
-      if (action) {
-        actions.push(action);
+    for (const source of graph.sources) {
+      if (source.type === 'automation') {
+        const action = createJobAction(source, graph, registry, currentChapterId, contextPascal);
+        if (action) {
+          actions.push(action);
+        }
       }
     }
   }
@@ -358,7 +362,7 @@ function createPrjCaseAction(
   let eventContextPascal = '';
   let infoContextPascal = '';
 
-  if ('sources' in eventSource && 'context' in eventSource) {
+  if ('element' in eventSource) {
     // eventSource is a DependencyGraph (event)
     eventFqcn = toFqcn(eventSource.element.context, eventSource.element.name);
     eventContextPascal = toPascalCase(eventSource.element.context);
@@ -368,7 +372,7 @@ function createPrjCaseAction(
     eventContextPascal = toPascalCase((eventSource as DependencyNode).context);
   }
 
-  if ('sources' in infoTarget && 'context' in infoTarget) {
+  if ('element' in infoTarget) {
     // infoTarget is a DependencyGraph (information)
     infoFqcn = toFqcn(infoTarget.element.context, infoTarget.element.name);
     infoContextPascal = toPascalCase(infoTarget.element.context);
@@ -424,7 +428,7 @@ function createOnAction(
   let eventContextPascal = '';
   let autoContextPascal = '';
 
-  if ('sources' in eventSource && 'context' in eventSource) {
+  if ('element' in eventSource) {
     eventFqcn = toFqcn(eventSource.element.context, eventSource.element.name);
     eventContextPascal = toPascalCase(eventSource.element.context);
   } else {
@@ -432,7 +436,7 @@ function createOnAction(
     eventContextPascal = toPascalCase((eventSource as DependencyNode).context);
   }
 
-  if ('sources' in autoTarget && 'context' in autoTarget) {
+  if ('element' in autoTarget) {
     autoFqcn = toFqcn(autoTarget.element.context, autoTarget.element.name);
     autoContextPascal = toPascalCase(autoTarget.element.context);
   } else {
@@ -490,7 +494,7 @@ function createJobAction(
   let infoContextPascal = '';
   let autoContextPascal = '';
 
-  if ('sources' in infoSource && 'context' in infoSource) {
+  if ('element' in infoSource) {
     infoFqcn = toFqcn(infoSource.element.context, infoSource.element.name);
     infoContextPascal = toPascalCase(infoSource.element.context);
   } else {
@@ -498,7 +502,7 @@ function createJobAction(
     infoContextPascal = toPascalCase((infoSource as DependencyNode).context);
   }
 
-  if ('sources' in autoTarget && 'context' in autoTarget) {
+  if ('element' in autoTarget) {
     autoFqcn = toFqcn(autoTarget.element.context, autoTarget.element.name);
     autoContextPascal = toPascalCase(autoTarget.element.context);
   } else {
