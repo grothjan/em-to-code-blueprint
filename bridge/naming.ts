@@ -21,22 +21,32 @@ export function toKebab(name: string): string {
 }
 
 /**
- * Converts a kebab-case string to PascalCase
- * e.g., "task-management" -> "TaskManagement"
- *       "add-todo" -> "AddTodo"
- *       "crm-create-user" -> "CrmCreateUser"
+ * Converts a free-text board name to PascalCase.
+ *
+ * Rules (per planning-rules.md):
+ * - Split on non-alphanumeric characters (spaces, hyphens, underscores, dots …)
+ * - Split on camelCase boundaries (lowercase→uppercase transitions), so
+ *   "UserCreated" and "user-created" both yield "UserCreated".
+ * - Capitalise the first character of each word; keep the rest as-is to
+ *   preserve intentional caps inside a word (e.g. "TodoID" → "TodoID").
+ * - Strip empty parts.
+ *
+ * Examples:
+ *   "task-management"  → "TaskManagement"
+ *   "Todo Management"  → "TodoManagement"
+ *   "user-created"     → "UserCreated"
+ *   "UserCreated"      → "UserCreated"   (camelCase boundary preserved)
+ *   "TASK"             → "TASK"          (all-caps word kept as-is)
+ *   "add todo"         → "AddTodo"
  */
 export function toPascalCase(name: string): string {
-  // First, replace spaces with hyphens to handle "create user" -> "create-user"
-  const normalized = name.replace(/\s+/g, '-');
-  return normalized
-    .split('-')
-    .map(part => {
-      if (part.length === 0) return part;
-      if (part.length === 1) return part.toUpperCase();
-      return part[0].toUpperCase() + part.slice(1).toLowerCase();
-    })
-    .join('');
+  // 1. Insert a separator before every lowercase→uppercase transition so that
+  //    "UserCreated" splits the same way as "user-created".
+  const withBoundaries = name.replace(/([a-z])([A-Z])/g, '$1-$2');
+  // 2. Split on any run of non-alphanumeric characters.
+  const parts = withBoundaries.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  // 3. Capitalise first character of each part; leave the rest as-is.
+  return parts.map(part => part.charAt(0).toUpperCase() + part.slice(1)).join('');
 }
 
 /**

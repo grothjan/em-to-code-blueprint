@@ -514,13 +514,24 @@ describe('Planner', () => {
         chapterId: 'chapter1'
       });
 
+      // The automation also needs a graph with an event source so R4 doesn't
+      // fire "no sources → blocked" before R6 gets to check cross-context.
+      const autoGraph = createGraph('elem2', 'automation', 'send-welcome', 'Other');
+      autoGraph.sources.push({
+        id: 'elem1',
+        type: 'event',
+        name: 'user-created',
+        context: 'Crm',
+        chapterId: 'chapter1'
+      });
+
       const input: PlanInput = {
         slice: {id: 'slice1', chapterId: 'chapter1'},
         elements: [
           createElement('elem1', 'event', 'user-created', 'Crm', 0),
           createElement('elem2', 'automation', 'send-welcome', 'Other', 1)
         ],
-        graphs: new Map([['elem1', eventGraph]]),
+        graphs: new Map([['elem1', eventGraph], ['elem2', autoGraph]]),
         registry
       };
 

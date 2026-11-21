@@ -8,6 +8,7 @@ import {
   Note,
   DependencyNode
 } from './model.js';
+import { toPascalCase } from './naming.js';
 
 /**
  * Plan input for the planner
@@ -596,13 +597,4 @@ function orderActions(actions: Action[]): Action[] {
  */
 function toFqcn(context: string, name: string): string {
   return `${toPascalCase(context)}.${toPascalCase(name)}`;
-}
-
-/**
- * Convert kebab-case to PascalCase
- */
-function toPascalCase(kebab: string): string {
-  return kebab.split('-').map(part =>
-    part.charAt(0).toUpperCase() + part.slice(1)
-  ).join('');
 }

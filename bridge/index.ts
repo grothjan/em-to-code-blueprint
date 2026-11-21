@@ -22,11 +22,11 @@
  *   BRIDGE_EVENT_SOURCED         Set to "true" to pass --event-sourced to `codegen context`.
  */
 
-import { readFileSync } from 'node:fs';
 import { createProophClient } from './prooph-client.js';
 import { createCodegenRunner } from './codegen-runner.js';
 import { parseInvocation, printHelp } from './config.js';
 import { run } from './run.js';
+import { readRegistrySnapshot } from '../lib/helpers/registry-reader.js';
 import type { Logger, RegistryReader } from './model.js';
 
 // ---------------------------------------------------------------------------
@@ -54,12 +54,8 @@ const logger: Logger = {
 // ---------------------------------------------------------------------------
 
 function makeRegistryReader(): RegistryReader {
-  // Deferred import so the module is not loaded at startup (tests can verify
-  // that nothing is read when invocation fails).
   return {
     read() {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { readRegistrySnapshot } = require('../lib/helpers/registry-reader.js');
       return readRegistrySnapshot(process.cwd());
     },
   };

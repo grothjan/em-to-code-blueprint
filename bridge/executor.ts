@@ -23,6 +23,7 @@ import type {
   RegistrySnapshot,
 } from './model.js';
 import { buildComment } from './task-comments.js';
+import { toPascalCase } from './naming.js';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -198,8 +199,10 @@ function findCommentTarget(
   const fqcnForComment = keyBody.split('<-')[0]; // for prjcase/on/job, take the left side
 
   // Build FQCN for each element and try to find a match.
+  // Board element names are raw text ("Plan Todo"); normalise to PascalCase
+  // before comparing against the action key which always uses PascalCase FQCNs.
   for (const el of elements) {
-    const fqcn = `${el.context}.${el.name}`;
+    const fqcn = `${toPascalCase(el.context)}.${toPascalCase(el.name)}`;
     if (fqcn === fqcnForComment) {
       return { element: el, chapterId: el.chapterId };
     }

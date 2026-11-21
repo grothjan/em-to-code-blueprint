@@ -63,7 +63,7 @@ describe('naming', () => {
     });
 
     it('handles uppercase input', () => {
-      expect(toPascalCase('TASK')).toBe('Task');
+      expect(toPascalCase('TASK')).toBe('TASK');
     });
   });
 
