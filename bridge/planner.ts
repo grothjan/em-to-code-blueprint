@@ -286,19 +286,15 @@ function generateForLinks(
   // Check both directions
   for (const target of graph.targets) {
     if (target.type === 'information') {
-      const action = createPrjCaseAction(graph, target, registry, currentChapterId, contextPascal);
-      if (action) {
-        actions.push(action);
-      }
+      const newActions = createPrjCaseAction(graph, target, registry, currentChapterId, contextPascal);
+      actions.push(...newActions);
     }
   }
 
   for (const source of graph.sources) {
     if (source.type === 'event') {
-      const action = createPrjCaseAction(source, graph, registry, currentChapterId, contextPascal);
-      if (action) {
-        actions.push(action);
-      }
+      const newActions = createPrjCaseAction(source, graph, registry, currentChapterId, contextPascal);
+      actions.push(...newActions);
     }
   }
 
@@ -348,7 +344,11 @@ function generateForLinks(
 }
 
 /**
- * Create prjcase action (R5)
+ * Create prjcase action(s) (R5).
+ *
+ * Returns an array because the information counterpart may not be registered
+ * yet (it lives in another slice). In that case an `information` action is
+ * prepended so codegen can satisfy it before the prjcase.
  */
 function createPrjCaseAction(
   eventSource: DependencyNode | DependencyGraph,
@@ -356,7 +356,7 @@ function createPrjCaseAction(
   registry: RegistrySnapshot,
   currentChapterId: string,
   contextPascal: string
-): Action | null {
+): Action[] {
   // Get event and info FQCNs
   let eventFqcn = '';
   let infoFqcn = '';
@@ -386,32 +386,52 @@ function createPrjCaseAction(
   // Same context requirement
   if (eventContextPascal !== infoContextPascal) {
     // Blocked on the information element
-    return {
+    return [{
       kind: 'blocked',
       key: `blocked:${infoFqcn}`,
       context: infoContextPascal,
       name: infoFqcn.split('.')[1],
       reason: 'event and information must be in the same context',
       hint: 'Move the information to the same context as the event'
-    };
+    }];
   }
 
   // Check if projection case already exists
   const existingApply = registry.eventApply.get(eventFqcn);
   if (existingApply && existingApply.has(infoFqcn)) {
-    return null; // Already exists, skip
+    return []; // Already exists, skip
   }
 
-  return {
+  const result: Action[] = [];
+
+  // R5 prerequisite: ensure the information itself is generated first when
+  // it is a graph counterpart not yet in the registry (Q3: generate what the
+  // link needs even if the counterpart slice is not planned yet).
+  const infoName = infoFqcn.split('.')[1];
+  if (
+    !registry.informationFolders.has(infoFqcn) &&
+    !registry.queries.has(infoFqcn)
+  ) {
+    result.push({
+      kind: 'information',
+      key: `information:${infoFqcn}`,
+      context: infoContextPascal,
+      name: infoName,
+    });
+  }
+
+  result.push({
     kind: 'prjcase',
     key: `prjcase:${infoFqcn}<-${eventFqcn}`,
     context: contextPascal,
-    name: infoFqcn.split('.')[1],
+    name: infoName,
     targetType: 'event',
     targetName: eventFqcn.split('.')[1],
     eventFqcn,
     infoFqcn
-  };
+  });
+
+  return result;
 }
 
 /**
