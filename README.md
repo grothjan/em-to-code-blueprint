@@ -100,6 +100,10 @@ See [Functional Approach](docs/fucntional-approach.md) for details.
 
 Open a [GitHub Issue](https://github.com/proophboard/em-to-code-blueprint/issues).
 
+## Community Chat
+
+Join the [prooph board Discord server](https://discord.gg/yWF6hvx2Ww)
+
 ## Todo
 
 - [ ] Codegen remove commands
