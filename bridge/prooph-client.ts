@@ -79,7 +79,9 @@ export function createProophClient(
     type: n.type,
     name: n.name,
     context: n.context || 'App',
-    chapterId: n.chapterId
+    chapterId: n.chapterId,
+    sliceId: n.sliceId,
+    chapterName: n.chapterName
   });
 
   return {

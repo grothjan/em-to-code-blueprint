@@ -8,7 +8,7 @@ import {
   Note,
   DependencyNode
 } from './model.js';
-import { toPascalCase } from './naming.js';
+import { toPascalCase, isValidPascalCase } from './naming.js';
 
 /**
  * Plan input for the planner
@@ -30,9 +30,10 @@ export function plan(input: PlanInput): Plan {
   const actions: Action[] = [];
   const notes: Note[] = [];
   const seenKeys = new Set<string>();
-
-  // R10: Skip elements whose graph call failed (no graph entry)
-  // These will still be processed by R2/R4 but links are skipped
+  // Contexts created by this plan that have not yet been "announced" in a
+  // comment; the first element action in such a context gets the note
+  // (task-comments.md, "context note").
+  const pendingNewContexts = new Set<string>();
 
   // Sort elements by index (API order) for stable output
   const sortedElements = [...elements].sort((a, b) => a.index - b.index);
@@ -43,12 +44,42 @@ export function plan(input: PlanInput): Plan {
       continue;
     }
 
-    const fqcn = toFqcn(element.context || 'App', element.name);
     const contextPascal = toPascalCase(element.context || 'App');
     const namePascal = toPascalCase(element.name);
+    const fqcn = `${contextPascal}.${namePascal}`;
 
-    // R10: If graph failed, skip links but process element itself
+    // Names: if the normalised name does not satisfy the CLI pattern, the
+    // element is unresolvable -> Note + explanatory task comment, no codegen.
+    if (!isValidPascalCase(contextPascal) || !isValidPascalCase(namePascal)) {
+      notes.push({
+        id: 'unresolvable-name',
+        elementId: element.id,
+        message: `Element "${element.name}" in context "${element.context || 'App'}" cannot be converted to a valid PascalCase name for codegen.`
+      });
+      pushUnique(actions, seenKeys, {
+        kind: 'blocked',
+        key: `blocked:${fqcn}`,
+        context: contextPascal,
+        name: namePascal || element.name,
+        reason: 'invalid name for codegen',
+        hint: 'Rename the element or context on the board so it converts to PascalCase',
+        commentTarget: {elementId: element.id, chapterId: element.chapterId, sliceId: element.sliceId, chapterName: element.chapterName}
+      });
+      continue;
+    }
+
+    // R10: If graph failed, skip links but process element itself (Note).
     const graph = graphs.get(element.id);
+    const needsGraph = element.type === 'event' || element.type === 'information' || element.type === 'automation';
+    if (needsGraph && !graph) {
+      notes.push({
+        id: 'missing-graph',
+        elementId: element.id,
+        message: `Dependency graph for ${fqcn} could not be loaded; its links were skipped.`
+      });
+    }
+
+    const emitted: Action[] = [];
 
     // R2: Registered vs new
     const isRegistered = isElementRegistered(element, registry);
@@ -56,45 +87,54 @@ export function plan(input: PlanInput): Plan {
     if (isRegistered) {
       // Emit 'known' action for elements in this slice (R9)
       if (element.chapterId === slice.chapterId) {
-        const key = `known:${fqcn}`;
-        if (!seenKeys.has(key)) {
-          actions.push({
-            kind: 'known',
-            key,
-            context: contextPascal,
-            name: namePascal
-          });
-          seenKeys.add(key);
-        }
+        emitted.push({
+          kind: 'known',
+          key: `known:${fqcn}`,
+          context: contextPascal,
+          name: namePascal,
+          commentTarget: {elementId: element.id, chapterId: element.chapterId, sliceId: element.sliceId, chapterName: element.chapterName}
+        });
       }
-      continue;
-    }
-
-    // R3: Context first - check if context exists
-    const contextAction = ensureContext(actions, seenKeys, contextPascal, registry);
-    if (contextAction) {
-      actions.push(contextAction);
-      seenKeys.add(contextAction.key);
-    }
-
-    // R4: Generate for new elements based on type
-    const elementActions = generateForElement(element, graph, registry, slice.chapterId);
-    for (const elemAction of elementActions) {
-      if (!seenKeys.has(elemAction.key)) {
-        actions.push(elemAction);
-        seenKeys.add(elemAction.key);
+    } else {
+      // R3: Context first - check if context exists
+      const contextAction = ensureContext(actions, seenKeys, contextPascal, registry);
+      if (contextAction) {
+        pushUnique(actions, seenKeys, contextAction);
+        pendingNewContexts.add(contextPascal);
       }
+
+      // R4: Generate for new elements based on type
+      emitted.push(...generateForElement(element, graph, registry));
     }
 
-    // R5-R7: Process links (event->information, event->automation, information->automation)
+    // R5-R7: Process links (event->information, event->automation, information->automation).
+    // Links are evaluated even for registered elements (R2): a missing link
+    // is generated even when both ends are known.
     if (graph) {
-      const linkActions = generateForLinks(graph, registry, slice.chapterId);
-      for (const linkAction of linkActions) {
-        if (!seenKeys.has(linkAction.key)) {
-          actions.push(linkAction);
-          seenKeys.add(linkAction.key);
+      emitted.push(...generateForLinks(graph, registry, slice.chapterId));
+    }
+
+    // Attach the "context was created" note to the first action whose comment
+    // lands on this element, then dedupe by key into the global action list.
+    let markedSelf = false;
+    for (const a of emitted) {
+      if (pendingNewContexts.has(contextPascal) && !markedSelf && a.kind !== 'context' && isSelfAction(a, element, namePascal)) {
+        a.contextNote = true;
+        markedSelf = true;
+      }
+      if (!seenKeys.has(a.key)) {
+        actions.push(a);
+        seenKeys.add(a.key);
+      } else if (a.contextNote) {
+        // The surviving action with this key carries the note.
+        const existing = actions.find(x => x.key === a.key);
+        if (existing) {
+          existing.contextNote = true;
         }
       }
+    }
+    if (markedSelf) {
+      pendingNewContexts.delete(contextPascal);
     }
   }
 
@@ -102,6 +142,34 @@ export function plan(input: PlanInput): Plan {
   const orderedActions = orderActions(actions);
 
   return {actions: orderedActions, notes};
+}
+
+/**
+ * Push an action unless an action with the same key was already emitted.
+ */
+function pushUnique(actions: Action[], seenKeys: Set<string>, action: Action): void {
+  if (!seenKeys.has(action.key)) {
+    actions.push(action);
+    seenKeys.add(action.key);
+  }
+}
+
+/**
+ * True when the action's task comment lands on `element` itself (not on a
+ * dependency counterpart). Used to attach the "context was created" note to
+ * the first element in a newly created context.
+ */
+function isSelfAction(action: Action, element: BoardElement, namePascal: string): boolean {
+  if (action.kind === element.type && action.name === namePascal) {
+    return true; // command / event / information
+  }
+  if ((action.kind === 'on' || action.kind === 'job') && action.automation === namePascal) {
+    return true; // automation element, comment goes to the automation
+  }
+  if (action.kind === 'blocked' && action.name === namePascal) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -145,13 +213,13 @@ function isElementRegistered(element: BoardElement, registry: RegistrySnapshot):
 function generateForElement(
   element: BoardElement,
   graph: DependencyGraph | undefined,
-  registry: RegistrySnapshot,
-  currentChapterId: string
+  registry: RegistrySnapshot
 ): Action[] {
   const actions: Action[] = [];
   const contextPascal = toPascalCase(element.context || 'App');
   const namePascal = toPascalCase(element.name);
   const fqcn = toFqcn(contextPascal, namePascal);
+  const selfTarget = {elementId: element.id, chapterId: element.chapterId, sliceId: element.sliceId, chapterName: element.chapterName};
 
   switch (element.type) {
     case 'command':
@@ -161,53 +229,17 @@ function generateForElement(
         context: contextPascal,
         name: namePascal,
         command: namePascal,
+        commentTarget: selfTarget,
       });
       break;
 
-    case 'event':
-      // R4: Event needs its command
-      const commandSource = findCommandSource(graph, registry, currentChapterId);
-      if (commandSource) {
-        if (commandSource.chapterId === currentChapterId) {
-          // Command in same chapter
-          const cmdFqcn = toFqcn(commandSource.context, commandSource.name);
-          const cmdContextPascal = toPascalCase(commandSource.context);
-          const cmdNamePascal = toPascalCase(commandSource.name);
-
-          // Check if command is already registered
-          if (!registry.commands.has(cmdFqcn)) {
-            actions.push({
-              kind: 'command',
-              key: `command:${cmdFqcn}`,
-              context: cmdContextPascal,
-              name: cmdNamePascal,
-              command: cmdNamePascal,
-            });
-          }
-
-          actions.push({
-            kind: 'event',
-            key: `event:${fqcn}`,
-            context: contextPascal,
-            name: namePascal,
-            event: namePascal,
-            command: cmdNamePascal,
-            targetType: 'command',
-            targetName: cmdNamePascal,
-            eventFqcn: fqcn
-          });
-        } else {
-          // Command in different chapter
-          actions.push({
-            kind: 'blocked',
-            key: `blocked:${fqcn}`,
-            context: contextPascal,
-            name: namePascal,
-            reason: 'command is in another chapter, which codegen does not support',
-            hint: 'Add the command to the Event Model or implement the external event manually'
-          });
-        }
-      } else {
+    case 'event': {
+      // R4: Event needs its command. Prefer the command in the same slice,
+      // else the first in graph order. Other command sources are named in
+      // the comment.
+      const commandSources = graph ? graph.sources.filter(s => s.type === 'command') : [];
+      const commandSource = chooseCommandSource(commandSources, element.sliceId);
+      if (!commandSource) {
         // No command source found
         actions.push({
           kind: 'blocked',
@@ -215,10 +247,56 @@ function generateForElement(
           context: contextPascal,
           name: namePascal,
           reason: 'no command source in the Event Model',
-          hint: 'Add the command to the Event Model'
+          hint: 'Add the command to the Event Model or implement the external event manually',
+          commentTarget: selfTarget,
+        });
+      } else if (toPascalCase(commandSource.context || 'App') !== contextPascal) {
+        // Command found but in a different context -> blocked (R4)
+        actions.push({
+          kind: 'blocked',
+          key: `blocked:${fqcn}`,
+          context: contextPascal,
+          name: namePascal,
+          reason: 'command is in another context, which codegen does not support',
+          hint: 'Add a command in the same context to the Event Model',
+          commentTarget: selfTarget,
+        });
+      } else {
+        const cmdFqcn = toFqcn(commandSource.context, commandSource.name);
+        const cmdNamePascal = toPascalCase(commandSource.name);
+
+        // Check if command is already registered
+        if (!registry.commands.has(cmdFqcn)) {
+          actions.push({
+            kind: 'command',
+            key: `command:${cmdFqcn}`,
+            context: contextPascal,
+            name: cmdNamePascal,
+            command: cmdNamePascal,
+            commentTarget: {elementId: commandSource.id, chapterId: commandSource.chapterId, sliceId: commandSource.sliceId, chapterName: commandSource.chapterName},
+          });
+        }
+
+        const otherCommandSources = commandSources
+          .filter(s => s !== commandSource)
+          .map(s => toFqcn(s.context || 'App', s.name));
+
+        actions.push({
+          kind: 'event',
+          key: `event:${fqcn}`,
+          context: contextPascal,
+          name: namePascal,
+          event: namePascal,
+          command: cmdNamePascal,
+          targetType: 'command',
+          targetName: cmdNamePascal,
+          eventFqcn: fqcn,
+          otherCommandSources: otherCommandSources.length > 0 ? otherCommandSources : undefined,
+          commentTarget: selfTarget,
         });
       }
       break;
+    }
 
     case 'information':
       actions.push({
@@ -227,6 +305,7 @@ function generateForElement(
         context: contextPascal,
         name: namePascal,
         information: namePascal,
+        commentTarget: selfTarget,
       });
       break;
 
@@ -239,7 +318,8 @@ function generateForElement(
           context: contextPascal,
           name: namePascal,
           reason: 'cannot tell event automation from job automation; needs a human/agent',
-          hint: 'Add at least one event or information source to the automation in the Event Model'
+          hint: 'Add at least one event or information source to the automation in the Event Model',
+          commentTarget: selfTarget,
         });
       }
       // Links are handled by generateForLinks
@@ -250,30 +330,14 @@ function generateForElement(
 }
 
 /**
- * Find command source for an event
+ * Choose the command source for an event: prefer a command in the same
+ * slice, else the first command in graph order (R4).
  */
-function findCommandSource(
-  graph: DependencyGraph | undefined,
-  registry: RegistrySnapshot,
-  currentChapterId: string
+function chooseCommandSource(
+  sources: DependencyNode[],
+  sliceId: string
 ): DependencyNode | null {
-  if (!graph) return null;
-
-  // Prefer command in same slice/chapter
-  for (const source of graph.sources) {
-    if (source.type === 'command' && source.chapterId === currentChapterId) {
-      return source;
-    }
-  }
-
-  // Fall back to first in graph order
-  for (const source of graph.sources) {
-    if (source.type === 'command') {
-      return source;
-    }
-  }
-
-  return null;
+  return sources.find(s => s.sliceId === sliceId) ?? sources[0] ?? null;
 }
 
 /**
@@ -388,6 +452,12 @@ function createPrjCaseAction(
     infoContextPascal = toPascalCase((infoTarget as DependencyNode).context);
   }
 
+  // The comment always goes to the information element, using its own
+  // chapterId when it is a graph counterpart (R9).
+  const infoCommentTarget = !('element' in infoTarget)
+    ? {elementId: infoTarget.id, chapterId: infoTarget.chapterId, sliceId: infoTarget.sliceId, chapterName: infoTarget.chapterName}
+    : undefined;
+
   // Same context requirement
   if (eventContextPascal !== infoContextPascal) {
     // Blocked on the information element
@@ -397,7 +467,8 @@ function createPrjCaseAction(
       context: infoContextPascal,
       name: infoFqcn.split('.')[1],
       reason: 'event and information must be in the same context',
-      hint: 'Move the information to the same context as the event'
+      hint: 'Move the information to the same context as the event',
+      commentTarget: infoCommentTarget
     }];
   }
 
@@ -423,6 +494,7 @@ function createPrjCaseAction(
       context: infoContextPascal,
       name: infoName,
       information: infoName,
+      commentTarget: infoCommentTarget,
     });
   }
 
@@ -436,7 +508,8 @@ function createPrjCaseAction(
     targetType: 'event',
     targetName: eventFqcn.split('.')[1],
     eventFqcn,
-    infoFqcn
+    infoFqcn,
+    commentTarget: infoCommentTarget
   });
 
   return result;
@@ -473,6 +546,12 @@ function createOnAction(
     autoContextPascal = toPascalCase((autoTarget as DependencyNode).context);
   }
 
+  // The comment goes to the automation element, using its own chapterId
+  // when it is a graph counterpart (R9).
+  const autoCommentTarget = !('element' in autoTarget)
+    ? {elementId: autoTarget.id, chapterId: autoTarget.chapterId, sliceId: autoTarget.sliceId, chapterName: autoTarget.chapterName}
+    : undefined;
+
   // Same context requirement
   if (eventContextPascal !== autoContextPascal) {
     return {
@@ -481,7 +560,8 @@ function createOnAction(
       context: autoContextPascal,
       name: autoFqcn.split('.')[1],
       reason: 'event and automation must be in the same context',
-      hint: 'Move the automation to the same context as the event'
+      hint: 'Move the automation to the same context as the event',
+      commentTarget: autoCommentTarget
     };
   }
 
@@ -506,7 +586,8 @@ function createOnAction(
     targetType: 'event',
     targetName: eventFqcn.split('.')[1],
     eventFqcn,
-    autoFqcn
+    autoFqcn,
+    commentTarget: autoCommentTarget
   };
 }
 
@@ -541,6 +622,12 @@ function createJobAction(
     autoContextPascal = toPascalCase((autoTarget as DependencyNode).context);
   }
 
+  // The comment goes to the automation element, using its own chapterId
+  // when it is a graph counterpart (R9).
+  const autoCommentTarget = !('element' in autoTarget)
+    ? {elementId: autoTarget.id, chapterId: autoTarget.chapterId, sliceId: autoTarget.sliceId, chapterName: autoTarget.chapterName}
+    : undefined;
+
   // Same context requirement
   if (infoContextPascal !== autoContextPascal) {
     return {
@@ -549,7 +636,8 @@ function createJobAction(
       context: autoContextPascal,
       name: autoFqcn.split('.')[1],
       reason: 'information and automation must be in the same context',
-      hint: 'Move the automation to the same context as the information'
+      hint: 'Move the automation to the same context as the information',
+      commentTarget: autoCommentTarget
     };
   }
 
@@ -568,7 +656,8 @@ function createJobAction(
     targetType: 'information',
     targetName: infoFqcn.split('.')[1],
     infoFqcn,
-    autoFqcn
+    autoFqcn,
+    commentTarget: autoCommentTarget
   };
 }
 

@@ -9,6 +9,12 @@ exports[`Planner > Snapshot test for stable output > should produce consistent o
       "kind": "context",
     },
     {
+      "commentTarget": {
+        "chapterId": "chapter1",
+        "chapterName": undefined,
+        "elementId": "info-elem",
+        "sliceId": undefined,
+      },
       "context": "Crm",
       "information": "User",
       "key": "information:Crm.User",
@@ -16,6 +22,12 @@ exports[`Planner > Snapshot test for stable output > should produce consistent o
       "name": "User",
     },
     {
+      "commentTarget": {
+        "chapterId": "chapter1",
+        "chapterName": undefined,
+        "elementId": "info-elem",
+        "sliceId": undefined,
+      },
       "context": "Crm",
       "event": "UserCreated",
       "eventFqcn": "Crm.UserCreated",
@@ -28,14 +40,27 @@ exports[`Planner > Snapshot test for stable output > should produce consistent o
       "targetType": "event",
     },
     {
+      "commentTarget": {
+        "chapterId": "chapter1",
+        "chapterName": "Chapter 1",
+        "elementId": "elem1",
+        "sliceId": "slice1",
+      },
       "context": "Crm",
-      "hint": "Add the command to the Event Model",
+      "contextNote": true,
+      "hint": "Add the command to the Event Model or implement the external event manually",
       "key": "blocked:Crm.UserCreated",
       "kind": "blocked",
       "name": "UserCreated",
       "reason": "no command source in the Event Model",
     },
   ],
-  "notes": [],
+  "notes": [
+    {
+      "elementId": "elem2",
+      "id": "missing-graph",
+      "message": "Dependency graph for Crm.User could not be loaded; its links were skipped.",
+    },
+  ],
 }
 `;

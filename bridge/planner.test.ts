@@ -2,7 +2,7 @@
 // Mapping to rules:
 // R2: registered vs new - tests for each element type registered/not registered
 // R3: context first - context missing -> one context action ordered first
-// R4: event with command in same slice; command in other chapter; two command sources; none -> blocked; command in other context -> blocked
+// R4: event with command in same slice; command in other chapter (same context -> generated); two command sources; none -> blocked; command in other context -> blocked
 // R5: event->information both directions give one prjcase; link already exists -> none; information not registered -> information + prjcase; cross-context -> blocked
 // R6/R7: event->automation gives on; information->automation gives job; automation with both; automation without sources -> blocked; automation already registered as job suppresses on
 // R8: ordering and de-duplication; stable output (snapshot)
@@ -171,6 +171,40 @@ describe('Planner', () => {
       expect(result.actions[0].kind).toBe('known');
       expect(result.actions[0].key).toBe('known:Crm.SendWelcomeEmail');
     });
+
+    it('should still evaluate links of a registered element (missing link generated)', () => {
+      // R2: a missing link is generated even when both ends are known.
+      const registry = createRegistry();
+      registry.contexts.add('Crm');
+      registry.events.add('Crm.UserCreated');
+      registry.informationFolders.add('Crm.User');
+      // no eventApply entry -> the link itself is not in the registry yet
+
+      const eventGraph = createGraph('elem1', 'event', 'user-created', 'Crm');
+      eventGraph.targets.push({
+        id: 'info-elem',
+        type: 'information',
+        name: 'user',
+        context: 'Crm',
+        chapterId: 'chapter1'
+      });
+
+      const input: PlanInput = {
+        slice: {id: 'slice1', chapterId: 'chapter1'},
+        elements: [
+          createElement('elem1', 'event', 'user-created', 'Crm', 0),
+          createElement('elem2', 'information', 'user', 'Crm', 1)
+        ],
+        graphs: new Map([['elem1', eventGraph]]),
+        registry
+      };
+
+      const result = plan(input);
+      const prjcaseAction = result.actions.find(a => a.kind === 'prjcase' && a.name === 'User');
+      expect(prjcaseAction).toBeDefined();
+      // But no information regeneration - it is already registered
+      expect(result.actions.find(a => a.kind === 'information')).toBeUndefined();
+    });
   });
 
   describe('R3: Context first', () => {
@@ -271,7 +305,7 @@ describe('Planner', () => {
       expect(blockedAction!.reason).toBe('no command source in the Event Model');
     });
 
-    it('should block event when command in different chapter', () => {
+    it('should generate event when command is in another chapter but same context', () => {
       const registry = createRegistry();
 
       const graph = createGraph('elem1', 'event', 'user-created', 'Crm');
@@ -291,9 +325,70 @@ describe('Planner', () => {
       };
 
       const result = plan(input);
+      expect(result.actions.find(a => a.kind === 'event' && a.name === 'UserCreated')).toBeDefined();
+      expect(result.actions.find(a => a.kind === 'blocked')).toBeUndefined();
+    });
+
+    it('should block event when command is in another context', () => {
+      const registry = createRegistry();
+
+      const graph = createGraph('elem1', 'event', 'user-created', 'Crm');
+      graph.sources.push({
+        id: 'cmd-elem',
+        type: 'command',
+        name: 'create-user',
+        context: 'Other',
+        chapterId: 'other-chapter'
+      });
+
+      const input: PlanInput = {
+        slice: {id: 'slice1', chapterId: 'chapter1'},
+        elements: [createElement('elem1', 'event', 'user-created', 'Crm', 0)],
+        graphs: new Map([['elem1', graph]]),
+        registry
+      };
+
+      const result = plan(input);
       const blockedAction = result.actions.find(a => a.kind === 'blocked' && a.name === 'UserCreated');
       expect(blockedAction).toBeDefined();
-      expect(blockedAction!.reason).toBe('command is in another chapter, which codegen does not support');
+      expect(blockedAction!.reason).toBe('command is in another context, which codegen does not support');
+    });
+
+    it('should prefer the command source from the same slice and list the others', () => {
+      const registry = createRegistry();
+
+      const graph = createGraph('elem1', 'event', 'user-created', 'Crm');
+      graph.sources.push(
+        {
+          id: 'cmd-other',
+          type: 'command',
+          name: 'register-user',
+          context: 'Crm',
+          chapterId: 'other-chapter',
+          sliceId: 'other-slice'
+        },
+        {
+          id: 'cmd-same',
+          type: 'command',
+          name: 'create-user',
+          context: 'Crm',
+          chapterId: 'chapter1',
+          sliceId: 'slice1'
+        }
+      );
+
+      const input: PlanInput = {
+        slice: {id: 'slice1', chapterId: 'chapter1'},
+        elements: [createElement('elem1', 'event', 'user-created', 'Crm', 0)],
+        graphs: new Map([['elem1', graph]]),
+        registry
+      };
+
+      const result = plan(input);
+      const eventAction = result.actions.find(a => a.kind === 'event' && a.name === 'UserCreated');
+      expect(eventAction).toBeDefined();
+      expect(eventAction!.command).toBe('CreateUser');
+      expect(eventAction!.otherCommandSources).toEqual(['Crm.RegisterUser']);
     });
 
     it('should generate information for information element', () => {
@@ -710,6 +805,48 @@ describe('Planner', () => {
       const result = plan(input);
       const blockedAction = result.actions.find(a => a.kind === 'blocked' && a.name === 'SendWelcome');
       expect(blockedAction).toBeDefined();
+    });
+
+    it('should record a note when a graph is missing (degraded plan)', () => {
+      const registry = createRegistry();
+
+      const input: PlanInput = {
+        slice: {id: 'slice1', chapterId: 'chapter1'},
+        elements: [
+          createElement('elem1', 'event', 'user-created', 'Crm', 0)
+        ],
+        graphs: new Map(), // graph call failed
+        registry
+      };
+
+      const result = plan(input);
+      const note = result.notes.find(n => n.id === 'missing-graph' && n.elementId === 'elem1');
+      expect(note).toBeDefined();
+    });
+  });
+
+  describe('Names: unresolvable elements', () => {
+    it('should block an element whose name cannot be converted to a valid PascalCase identifier and record a note', () => {
+      const registry = createRegistry();
+
+      const input: PlanInput = {
+        slice: {id: 'slice1', chapterId: 'chapter1'},
+        elements: [
+          createElement('elem1', 'command', '!!!', 'Crm', 0) // normalises to ''
+        ],
+        graphs: new Map(),
+        registry
+      };
+
+      const result = plan(input);
+      const blockedAction = result.actions.find(a => a.kind === 'blocked');
+      expect(blockedAction).toBeDefined();
+      expect(blockedAction!.reason).toBe('invalid name for codegen');
+      // no codegen action for the element
+      expect(result.actions.find(a => a.kind === 'command')).toBeUndefined();
+      // note recorded
+      const note = result.notes.find(n => n.id === 'unresolvable-name' && n.elementId === 'elem1');
+      expect(note).toBeDefined();
     });
   });
 
