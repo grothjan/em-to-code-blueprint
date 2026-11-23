@@ -400,6 +400,7 @@ export async function execute(
 
     const commentText = buildComment(action, {
       element,
+      chapterId,
       chapterName,
       sliceLabel,
     });

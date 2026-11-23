@@ -5,6 +5,14 @@ exports[`Planner > Snapshot test for stable output > should produce consistent o
   "actions": [
     {
       "context": "Crm",
+      "files": [
+        "src/domain/crm/index.ts",
+        "src/domain/crm/services.ts",
+        "src/domain/crm/commands.ts",
+        "src/domain/crm/events.ts",
+        "src/domain/crm/queries.ts",
+        "src/domain/crm/job-automations.ts",
+      ],
       "key": "context:Crm",
       "kind": "context",
     },
@@ -16,10 +24,16 @@ exports[`Planner > Snapshot test for stable output > should produce consistent o
         "sliceId": undefined,
       },
       "context": "Crm",
+      "files": [
+        "src/domain/crm/information/user/user.ts",
+        "src/domain/crm/information/user/query.ts",
+        "src/domain/crm/information/user/resolve.ts",
+      ],
       "information": "User",
       "key": "information:Crm.User",
       "kind": "information",
       "name": "User",
+      "registryFile": "src/domain/crm/queries.ts",
     },
     {
       "commentTarget": {
@@ -31,11 +45,17 @@ exports[`Planner > Snapshot test for stable output > should produce consistent o
       "context": "Crm",
       "event": "UserCreated",
       "eventFqcn": "Crm.UserCreated",
+      "files": [
+        "src/domain/crm/information/user/projection/user-created/apply.ts",
+        "src/domain/crm/information/user/projection/user-created/prepare.ts",
+        "src/domain/crm/information/user/projection/user-created/state.ts",
+      ],
       "infoFqcn": "Crm.User",
       "information": "User",
       "key": "prjcase:Crm.User<-Crm.UserCreated",
       "kind": "prjcase",
       "name": "User",
+      "registryFile": "src/domain/crm/events.ts",
       "targetName": "UserCreated",
       "targetType": "event",
     },

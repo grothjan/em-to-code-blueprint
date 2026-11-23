@@ -8,7 +8,16 @@ import {
   Note,
   DependencyNode
 } from './model.js';
-import { toPascalCase, isValidPascalCase } from './naming.js';
+import {
+  toPascalCase,
+  toKebab,
+  isValidPascalCase,
+  getCommandPath,
+  getInformationPath,
+  getAutomationPath,
+  getProjectionCasePath,
+  getRegistryFilePath
+} from './naming.js';
 
 /**
  * Plan input for the planner
@@ -87,13 +96,15 @@ export function plan(input: PlanInput): Plan {
     if (isRegistered) {
       // Emit 'known' action for elements in this slice (R9)
       if (element.chapterId === slice.chapterId) {
-        emitted.push({
+        const knownAction: Action = {
           kind: 'known',
           key: `known:${fqcn}`,
           context: contextPascal,
           name: namePascal,
           commentTarget: {elementId: element.id, chapterId: element.chapterId, sliceId: element.sliceId, chapterName: element.chapterName}
-        });
+        };
+        enrichKnownAction(knownAction, element, graph, registry);
+        emitted.push(knownAction);
       }
     } else {
       // R3: Context first - check if context exists
@@ -136,6 +147,12 @@ export function plan(input: PlanInput): Plan {
     if (markedSelf) {
       pendingNewContexts.delete(contextPascal);
     }
+  }
+
+  // Populate the {files}/{registryFile} fields so task comments can list the
+  // real paths codegen wrote (task-comments.md "{files} lists real paths").
+  for (const a of actions) {
+    fillActionFiles(a);
   }
 
   // R8: Order and deduplicate
@@ -685,6 +702,123 @@ function ensureContext(
     key: contextKey,
     context: contextPascal
   };
+}
+
+/**
+ * Fill files/registryFile for actions that run codegen (task-comments
+ * {files}: real paths computed from naming rules; verified on disk by the
+ * L4 tests). 'known' actions are enriched by enrichKnownAction instead.
+ */
+function fillActionFiles(a: Action): void {
+  const ctx = a.context;
+  if (!ctx) {
+    return;
+  }
+  switch (a.kind) {
+    case 'context': {
+      const base = `src/domain/${toKebab(ctx)}`;
+      a.files = [
+        `${base}/index.ts`,
+        `${base}/services.ts`,
+        `${base}/commands.ts`,
+        `${base}/events.ts`,
+        `${base}/queries.ts`,
+        `${base}/job-automations.ts`
+      ];
+      break;
+    }
+    case 'command':
+      a.files = ['payload.ts', 'prepare.ts', 'handle.ts', 'state.ts']
+        .map(f => `${getCommandPath(ctx, a.name!)}/${f}`);
+      a.registryFile = getRegistryFilePath(ctx, 'command');
+      break;
+    case 'event':
+      if (a.targetName) {
+        a.files = [`${getCommandPath(ctx, a.targetName)}/events/${toKebab(a.name!)}.ts`];
+      }
+      a.registryFile = getRegistryFilePath(ctx, 'event');
+      break;
+    case 'information': {
+      const base = getInformationPath(ctx, a.name!);
+      a.files = [`${base}/${toKebab(a.name!)}.ts`, `${base}/query.ts`, `${base}/resolve.ts`];
+      a.registryFile = getRegistryFilePath(ctx, 'query');
+      break;
+    }
+    case 'prjcase':
+      a.files = ['apply.ts', 'prepare.ts', 'state.ts']
+        .map(f => `${getProjectionCasePath(ctx, a.name!, a.targetName!)}/${f}`);
+      a.registryFile = getRegistryFilePath(ctx, 'event');
+      break;
+    case 'on':
+      a.files = ['on.ts', 'prepare.ts', 'state.ts']
+        .map(f => `${getAutomationPath(ctx, a.name!, 'event')}/${f}`);
+      a.registryFile = getRegistryFilePath(ctx, 'event');
+      break;
+    case 'job':
+      a.files = ['process.ts', 'prepare.ts', 'state.ts']
+        .map(f => `${getAutomationPath(ctx, a.name!, 'job')}/${f}`);
+      a.registryFile = getRegistryFilePath(ctx, 'job');
+      break;
+    default:
+      break; // known / blocked
+  }
+}
+
+/**
+ * Fill files/registryFile on a 'known' action so the comment can point the
+ * agent at the existing implementation (spec: Implementation: {files}).
+ */
+function enrichKnownAction(
+  a: Action,
+  element: BoardElement,
+  graph: DependencyGraph | undefined,
+  registry: RegistrySnapshot
+): void {
+  const ctx = toPascalCase(element.context || 'App');
+  const name = toPascalCase(element.name);
+  const fqcn = `${ctx}.${name}`;
+
+  switch (element.type) {
+    case 'command':
+      a.files = ['payload.ts', 'prepare.ts', 'handle.ts', 'state.ts']
+        .map(f => `${getCommandPath(ctx, name)}/${f}`);
+      a.registryFile = getRegistryFilePath(ctx, 'command');
+      break;
+    case 'event': {
+      a.registryFile = getRegistryFilePath(ctx, 'event');
+      // The event file lives under its emitting command's folder; recover
+      // the command from the element's graph when available.
+      const cmd = chooseCommandSource(
+        graph ? graph.sources.filter(s => s.type === 'command') : [],
+        element.sliceId
+      );
+      if (cmd) {
+        a.files = [`${getCommandPath(ctx, toPascalCase(cmd.name))}/events/${toKebab(name)}.ts`];
+      }
+      break;
+    }
+    case 'information': {
+      a.registryFile = getRegistryFilePath(ctx, 'query');
+      const base = getInformationPath(ctx, name);
+      a.files = [`${base}/${toKebab(name)}.ts`, `${base}/query.ts`, `${base}/resolve.ts`];
+      // Registered projection cases add their files so the agent can compare.
+      for (const [evtFqcn, infos] of registry.eventApply) {
+        if (!infos.has(fqcn)) continue;
+        const pbase = getProjectionCasePath(ctx, name, evtFqcn.split('.')[1]);
+        a.files.push(`${pbase}/apply.ts`, `${pbase}/prepare.ts`, `${pbase}/state.ts`);
+      }
+      break;
+    }
+    case 'automation': {
+      const asJob = registry.jobs.has(fqcn);
+      const base = getAutomationPath(ctx, name, asJob ? 'job' : 'event');
+      a.files = asJob
+        ? [`${base}/process.ts`, `${base}/prepare.ts`, `${base}/state.ts`]
+        : [`${base}/on.ts`, `${base}/prepare.ts`, `${base}/state.ts`];
+      a.registryFile = getRegistryFilePath(ctx, asJob ? 'job' : 'event');
+      break;
+    }
+  }
 }
 
 /**
