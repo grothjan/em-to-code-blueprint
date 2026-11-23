@@ -369,18 +369,23 @@ function generateForLinks(
   const contextPascal = toPascalCase(graph.element.context);
 
   // R5: Event -> Information (projection case)
-  // Check both directions
-  for (const target of graph.targets) {
-    if (target.type === 'information') {
-      const newActions = createPrjCaseAction(graph, target, registry, currentChapterId, contextPascal);
-      actions.push(...newActions);
+  // Check both directions: an event element with an information target, or
+  // an information element with an event source.
+  if (graph.element.type === 'event') {
+    for (const target of graph.targets) {
+      if (target.type === 'information') {
+        const newActions = createPrjCaseAction(graph, target, registry, currentChapterId, contextPascal);
+        actions.push(...newActions);
+      }
     }
   }
 
-  for (const source of graph.sources) {
-    if (source.type === 'event') {
-      const newActions = createPrjCaseAction(source, graph, registry, currentChapterId, contextPascal);
-      actions.push(...newActions);
+  if (graph.element.type === 'information') {
+    for (const source of graph.sources) {
+      if (source.type === 'event') {
+        const newActions = createPrjCaseAction(source, graph, registry, currentChapterId, contextPascal);
+        actions.push(...newActions);
+      }
     }
   }
 
@@ -418,6 +423,27 @@ function generateForLinks(
 
     for (const source of graph.sources) {
       if (source.type === 'automation') {
+        const action = createJobAction(source, graph, registry, currentChapterId, contextPascal);
+        if (action) {
+          actions.push(action);
+        }
+      }
+    }
+  }
+
+  // R6/R7 reverse direction: the automation element's own graph tells what
+  // feeds it. An event source makes it an event automation (on), an
+  // information source makes it a job automation (job). This is also how R4
+  // distinguishes the two when the automation has no other graph data.
+  if (graph.element.type === 'automation') {
+    for (const source of graph.sources) {
+      if (source.type === 'event') {
+        const action = createOnAction(source, graph, registry, currentChapterId, contextPascal);
+        if (action) {
+          actions.push(action);
+        }
+      }
+      if (source.type === 'information') {
         const action = createJobAction(source, graph, registry, currentChapterId, contextPascal);
         if (action) {
           actions.push(action);
