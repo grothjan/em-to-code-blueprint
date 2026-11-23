@@ -94,12 +94,7 @@ async function main(): Promise<void> {
 
   // spec-stream passes the sliceId as the first positional argument per
   // api-contracts.md section 1:  run: "npx tsx bridge/index.ts \"$SPEC_STREAM_SLICE_ID\""
-  // parseInvocation handles this via argv[0] when it is not a flag.
-  // We pass it through as-is; config.ts already handles argv[0] as sliceId.
-  //
-  // Build an argv list that also exposes the positional as --slice-id if it
-  // looks like a plain ID (no dashes prefix) so config.ts can parse it.
-  // config.ts already reads argv[0] from the _.rest array; keep this simple.
+  // parseInvocation resolves it from argv positionals, --slice-id, or env.
 
   let stdinText: string | undefined;
   try {
@@ -110,10 +105,6 @@ async function main(): Promise<void> {
 
   let invocation;
   try {
-    // spec-stream passes `"$SPEC_STREAM_SLICE_ID"` as argv[2] (after node + script).
-    // parseInvocation expects argv without node/script, so rawArgv[0] is the sliceId.
-    // config.ts treats non-flag args in _[] as positional; it uses _[0] as sliceId
-    // when --slice-id is not given.
     invocation = parseInvocation(rawArgv, process.env as Record<string, string | undefined>, stdinText);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
