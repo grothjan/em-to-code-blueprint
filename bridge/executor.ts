@@ -199,31 +199,48 @@ interface CommentTarget {
  * element with its own chapterId (api-contracts 2.3: post to the chapter
  * that owns the element).
  *
- * Counterpart elements are not part of the slice's element list, so for the
- * open-marker check we fetch their dependency graph (its `element` carries
- * `comments`); when that call fails we post anyway and log a warning.
+ * Counterpart elements are not part of the triggering slice's element list.
+ * For the open-marker check we fetch their slice's elements via
+ * `commentTarget.sliceId` — slice elements carry `comments`, while the
+ * dependency-graph response's `element` does not. Counterpart slices are
+ * cached per (chapterId, sliceId) since several actions (e.g. information +
+ * prjcase) often target the same counterpart slice. When the fetch fails or
+ * no sliceId is known we post anyway and log a warning.
  */
 async function resolveCommentTarget(
   action: Action,
   elements: BoardElement[],
   prooph: ProophClient,
   opts: { sliceLabel: string; chapterName: string },
-  logger: Logger
+  logger: Logger,
+  sliceElementCache: Map<string, {elements: BoardElement[]; sliceLabel: string}>
 ): Promise<CommentTarget | null> {
   if (action.commentTarget) {
     const t = action.commentTarget;
     const inSlice = elements.find(e => e.id === t.elementId && e.chapterId === t.chapterId);
 
     let markerCheckElement: BoardElement | null = inSlice ?? null;
-    if (!markerCheckElement) {
+    let counterpartSliceLabel: string | undefined;
+    if (!markerCheckElement && t.sliceId) {
+      const cacheKey = `${t.chapterId}:${t.sliceId}`;
       try {
-        const graph = await prooph.getDependencyGraph(t.chapterId, t.elementId);
-        markerCheckElement = graph.element ?? null;
-      } catch (err) {
+        let cached = sliceElementCache.get(cacheKey);
+        if (!cached) {
+          const res = await prooph.getSliceElements(t.chapterId, t.sliceId);
+          cached = { elements: res.elements, sliceLabel: res.slice.label ?? t.sliceId };
+          sliceElementCache.set(cacheKey, cached);
+        }
+        markerCheckElement = cached.elements.find(e => e.id === t.elementId) ?? null;
+        counterpartSliceLabel = cached.sliceLabel;
+      } catch {
         logger.warn(
-          `Could not fetch counterpart element ${t.elementId} for marker check; posting without idempotency check.`
+          `Could not fetch counterpart slice ${t.sliceId} for marker check; posting without idempotency check.`
         );
       }
+    } else if (!markerCheckElement) {
+      logger.warn(
+        `No sliceId for counterpart element ${t.elementId}; posting without idempotency check.`
+      );
     }
 
     return {
@@ -232,7 +249,7 @@ async function resolveCommentTarget(
       elementRef: inSlice ?? { id: t.elementId, sliceId: t.sliceId ?? '' },
       markerCheckElement,
       chapterName: t.chapterName || inSlice?.chapterName || opts.chapterName,
-      sliceLabel: inSlice ? opts.sliceLabel : (t.sliceId || opts.sliceLabel),
+      sliceLabel: inSlice ? opts.sliceLabel : (counterpartSliceLabel ?? t.sliceId ?? opts.sliceLabel),
     };
   }
 
@@ -357,6 +374,10 @@ export async function execute(
   }
 
   const results: ActionResult[] = [];
+  // Counterpart slices fetched for the open-marker check, keyed
+  // `${chapterId}:${sliceId}` — several actions often share one counterpart
+  // slice (e.g. information + prjcase on the same information element).
+  const sliceElementCache = new Map<string, {elements: BoardElement[]; sliceLabel: string}>();
 
   for (const action of plan.actions) {
     // -----------------------------------------------------------------------
@@ -426,7 +447,8 @@ export async function execute(
       elements,
       prooph,
       { sliceLabel, chapterName },
-      logger
+      logger,
+      sliceElementCache
     );
     if (!target) {
       // Cannot find the element to comment on (e.g. a cross-slice element we

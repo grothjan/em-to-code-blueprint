@@ -57,14 +57,21 @@ class FakeRegistry implements RegistryReader {
 class FakeProoph implements ProophClient {
   comments: {chapterId: string; elementId: string; text: string}[] = [];
   graphs = new Map<string, DependencyGraph>();
+  slices = new Map<string, {label: string; elements: BoardElement[]}>();
+  sliceCalls: string[] = [];
   commentError: Error | null = null;
 
-  async getSliceElements(_chapterId: string, _sliceId: string): Promise<{
-    slice: { id: string; chapterId: string };
+  async getSliceElements(chapterId: string, sliceId: string): Promise<{
+    slice: { id: string; chapterId: string; label?: string };
     elements: BoardElement[];
     chapterName: string;
   }> {
-    throw new Error('not used by executor');
+    this.sliceCalls.push(`${chapterId}/${sliceId}`);
+    const s = this.slices.get(`${chapterId}/${sliceId}`);
+    if (!s) {
+      throw new Error(`Slice ${sliceId} not found in chapter ${chapterId}`);
+    }
+    return { slice: { id: sliceId, chapterId, label: s.label }, elements: s.elements, chapterName: 'X' };
   }
   async getDependencyGraph(chapterId: string, elementId: string) {
     const graph = this.graphs.get(`${chapterId}/${elementId}`);
@@ -360,11 +367,7 @@ describe('execute', () => {
     // The information element lives in another chapter -> not in `elements`.
     const counterpart = createElement('info-other', 'information', 'User', 'Crm', 'chapter-2');
     counterpart.comments = [];
-    prooph.graphs.set('chapter-2/info-other', {
-      element: counterpart,
-      sources: [],
-      targets: []
-    });
+    prooph.slices.set('chapter-2/slice-2', {label: 'Slice 2', elements: [counterpart]});
 
     const sliceEvent = createElement('elem-evt', 'event', 'UserCreated', 'Crm', 'chapter-1');
 
@@ -378,12 +381,13 @@ describe('execute', () => {
       event: 'UserCreated',
       eventFqcn: 'Crm.UserCreated',
       infoFqcn: 'Crm.User',
-      commentTarget: {elementId: 'info-other', chapterId: 'chapter-2', chapterName: 'Chapter Two'}
+      commentTarget: {elementId: 'info-other', chapterId: 'chapter-2', chapterName: 'Chapter Two', sliceId: 'slice-2'}
     };
 
     const result = await execute(planOf([action]), [sliceEvent], deps, {chapterName: 'Chapter One', sliceLabel: 'Slice 1'});
 
     expect(codegen.calls).toEqual([['prjcase', 'Crm', 'User', 'UserCreated']]);
+    expect(prooph.sliceCalls).toEqual(['chapter-2/slice-2']);
     expect(prooph.comments).toHaveLength(1);
     // posted to the counterpart's own chapter (api-contracts 2.3)
     expect(prooph.comments[0].chapterId).toBe('chapter-2');
@@ -392,7 +396,7 @@ describe('execute', () => {
     expect(result.results[0].commentPosted).toBe(true);
   });
 
-  it('honours the open-marker check fetched via the counterpart dependency graph', async () => {
+  it('honours the open-marker check fetched via the counterpart slice elements', async () => {
     const {codegen, prooph, deps} = createDeps();
 
     const counterpart = createElement('info-other', 'information', 'User', 'Crm', 'chapter-2', [
@@ -405,7 +409,10 @@ describe('execute', () => {
         createdAt: 'x'
       }
     ]);
-    prooph.graphs.set('chapter-2/info-other', {element: counterpart, sources: [], targets: []});
+    // the graph response's element carries no comments — the marker check must
+    // fetch the counterpart's slice elements instead (commentTarget.sliceId)
+    prooph.graphs.set('chapter-2/info-other', {element: {...counterpart, comments: []}, sources: [], targets: []});
+    prooph.slices.set('chapter-2/slice-other', {label: 'Slice Other', elements: [counterpart]});
 
     const action: Action = {
       kind: 'prjcase',
@@ -415,18 +422,19 @@ describe('execute', () => {
       targetName: 'UserCreated',
       eventFqcn: 'Crm.UserCreated',
       infoFqcn: 'Crm.User',
-      commentTarget: {elementId: 'info-other', chapterId: 'chapter-2'}
+      commentTarget: {elementId: 'info-other', chapterId: 'chapter-2', sliceId: 'slice-other'}
     };
 
     const result = await execute(planOf([action]), [], deps, {chapterName: 'C', sliceLabel: 'S'});
 
     expect(codegen.calls).toHaveLength(1); // codegen ran
+    expect(prooph.sliceCalls).toEqual(['chapter-2/slice-other']);
     expect(prooph.comments).toHaveLength(0); // marker already open -> no repost
   });
 
-  it('still posts the counterpart comment when the marker check cannot fetch the element', async () => {
+  it('still posts the counterpart comment when the counterpart slice fetch fails', async () => {
     const {codegen, prooph, deps} = createDeps();
-    // no graph registered for the counterpart -> getDependencyGraph throws
+    // no slice registered for 'slice-missing' -> getSliceElements throws
 
     const action: Action = {
       kind: 'on',
@@ -438,7 +446,7 @@ describe('execute', () => {
       event: 'UserCreated',
       eventFqcn: 'Crm.UserCreated',
       autoFqcn: 'Crm.SendWelcome',
-      commentTarget: {elementId: 'auto-elsewhere', chapterId: 'chapter-2'}
+      commentTarget: {elementId: 'auto-elsewhere', chapterId: 'chapter-2', sliceId: 'slice-missing'}
     };
 
     const result = await execute(planOf([action]), [], deps, {chapterName: 'C', sliceLabel: 'S'});

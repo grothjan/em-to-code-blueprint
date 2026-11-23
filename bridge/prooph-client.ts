@@ -113,7 +113,7 @@ export function createProophClient(
           sliceStatus: slice.status
         }));
 
-      return { slice: { id: slice.id, chapterId }, elements, chapterName: data.name };
+      return { slice: { id: slice.id, chapterId, label: slice.label }, elements, chapterName: data.name };
     },
 
     async getDependencyGraph(chapterId, elementId) {

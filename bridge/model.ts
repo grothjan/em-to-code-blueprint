@@ -139,7 +139,7 @@ export interface BridgeDeps {
 
 export interface ProophClient {
   getSliceElements(chapterId: string, sliceId: string): Promise<{
-    slice: { id: string; chapterId: string };
+    slice: { id: string; chapterId: string; label?: string };
     elements: BoardElement[];
     chapterName: string;
   }>;
