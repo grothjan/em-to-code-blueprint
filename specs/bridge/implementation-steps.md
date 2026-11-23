@@ -52,7 +52,7 @@ Read first: `README.md` of this folder, `AGENTS.md`, `docs/cli.md`, `bin/app.ts`
 - `bridge/testing/sandbox-project.ts`; L4 tests (full chain, validation failures, hostile argument).
 - Contract test: registry-reader reads what codegen wrote; comment `{files}` paths exist on disk.
 - Open point to check here: the sandbox must resolve the `@lib/*` alias (tsconfig `paths`) and the blueprint template path (`codegen` uses `__dirname`, domain uses `process.cwd()`). If the copy approach fails, try running with `--tsconfig` pointing at the real repo.
-- Findings: skipped for now due to token limits. Manual tests will be performed instead.
+- Findings: open point resolved — the copy approach works: the sandbox copies `bin`, `codegen`, `lib`, `tsconfig.json` into a `mkdtemp` dir under `os.tmpdir()` and runs the local `node_modules/.bin/tsx`; `@lib/*` resolves via the copied tsconfig, blueprint `__dirname` paths stay relative-valid, `getDomainPath()` follows `cwd`. The contract test found a real planner bug: R5's source/target direction checks were missing the `graph.element.type` gate, so an automation element's graph with event/information sources produced phantom `information`/`prjcase` actions and no reverse `on`/`job` actions — fixed in `generateForLinks`. L4 covers full chain (context → command → event → information → prjcase → on → job), validation failures, hostile args passed literally through the execFile arg array, and reader↔codegen contract on disk.
 
 ## Step 9: Entry point, spec-stream config, docs
 - `bridge/run.ts`, `bridge/index.ts` (exit codes 0/1/2, `--dry-run`, `BRIDGE_EVENT_SOURCED`).
@@ -69,4 +69,4 @@ Read first: `README.md` of this folder, `AGENTS.md`, `docs/cli.md`, `bin/app.ts`
 - Run full suite twice (no order dependence), `npm run ts:check`.
 - Manual smoke test (needs a real board and key; mark as not run if unavailable): start spec-stream in the blueprint root, change a slice status to the trigger status, observe generated files in `src/domain`, comments on elements, and no loop. Then revert generated files with git.
 - Confirm no temp dirs or sandbox leftovers (`afterEach` cleanup) and no secrets in fixtures.
-- Findings:
+- Findings: mapping comment blocks at top of `planner.test.ts` (R1–R10 + name validation) and `task-comments.test.ts` (per template). Added the previously uncovered rule tests: R1 relevance, R5 prerequisite-information ordering, R7 cross-context blocked, R9 counterpart `commentTarget` chapterId. Full suite: 11 files / 252 tests, run twice, identical; `ts:check` clean; 0 skipped (registry job test un-skipped — root cause was `toHaveProperty` on a `Map`, now `.has()`/`.get()`; temp dirs moved to `os.tmpdir()`, repo leftover `lib/helpers/__test_temp__/` removed). No sandbox leftovers; only `test-key-123` dummy values in fixtures; `.env` gitignored. Manual smoke test: **not run** — requires a real board, write-enabled key and an authorized target slice; no target slice was provided.

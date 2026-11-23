@@ -1,3 +1,16 @@
+// Task-comment template tests
+// Mapping to task-comments.md templates:
+// - marker format [em-to-code-blueprint:<action-key>]: asserted in every builder test
+// - where-to-look block incl. real chapterId/sliceLabel/elementId: every builder test + "renders the real chapter id"
+// - known: KNOWN_ELEMENT_SENTENCE constant, files + registryFile variants, inline snapshot
+// - command: files block, registry line, context note (only when flagged), inline snapshot
+// - event: files block, other-command-sources note (present/absent), inline snapshot
+// - information / prjcase / on / job: files block + registration line, inline snapshots
+// - blocked: reason + optional hint, inline snapshot
+// - context note ("Context X was created"): gated on action.contextNote, covered for
+//   command and asserted absent otherwise
+// - context actions produce no comment
+
 import { describe, it, expect } from 'vitest';
 import {
   KNOWN_ELEMENT_SENTENCE,

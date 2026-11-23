@@ -1,13 +1,15 @@
 // Planner tests - table-driven
 // Mapping to rules:
-// R2: registered vs new - tests for each element type registered/not registered
+// R1: non-relevant element types (ui/hotspot/...) are skipped entirely
+// R2: registered vs new - tests for each element type registered/not registered; links of registered elements still evaluated
 // R3: context first - context missing -> one context action ordered first
 // R4: event with command in same slice; command in other chapter (same context -> generated); two command sources; none -> blocked; command in other context -> blocked
 // R5: event->information both directions give one prjcase; link already exists -> none; information not registered -> information + prjcase; cross-context -> blocked
-// R6/R7: event->automation gives on; information->automation gives job; automation with both; automation without sources -> blocked; automation already registered as job suppresses on
+// R6/R7: event->automation gives on; information->automation gives job; automation with both; automation without sources -> blocked; automation already registered as job suppresses on; cross-context -> blocked
 // R8: ordering and de-duplication; stable output (snapshot)
 // R9: counterparts of other chapters receive comment targets with their own chapterId
 // R10: missing graph -> degraded plan + note
+// Names: unresolvable element names -> blocked + note
 
 import {describe, it, expect, beforeEach} from 'vitest';
 import {plan, PlanInput} from './planner.js';
@@ -67,6 +69,30 @@ function findAction(actions: Action[], partial: Partial<Action>): Action | undef
 }
 
 describe('Planner', () => {
+  describe('R1: Element relevance', () => {
+    it('should skip elements that are not command/event/information/automation', () => {
+      const registry = createRegistry();
+
+      const uiElement = createElement('elem-ui', 'command', 'a-button', 'Crm', 0);
+      (uiElement as {type: string}).type = 'ui';
+      const hotspot = createElement('elem-hs', 'command', 'a-hotspot', 'Crm', 1);
+      (hotspot as {type: string}).type = 'hotspot';
+
+      const input: PlanInput = {
+        slice: {id: 'slice1', chapterId: 'chapter1'},
+        elements: [uiElement, hotspot, createElement('elem1', 'command', 'create-user', 'Crm', 2)],
+        graphs: new Map(),
+        registry
+      };
+
+      const result = plan(input);
+      // only the command element produced actions (context + command)
+      expect(result.actions.filter(a => a.kind === 'command')).toHaveLength(1);
+      expect(result.actions.find(a => a.name === 'AButton')).toBeUndefined();
+      expect(result.actions.find(a => a.name === 'AHotspot')).toBeUndefined();
+    });
+  });
+
   describe('R2: Registered vs. new', () => {
     it('should mark command as known when registered', () => {
       const registry = createRegistry();
@@ -512,6 +538,60 @@ describe('Planner', () => {
       expect(prjcaseActions).toHaveLength(0);
     });
 
+    it('should generate the information itself before the prjcase when the counterpart is not registered', () => {
+      // R5 prerequisite: the information counterpart lives in another slice
+      // and is not in the registry -> information action precedes prjcase.
+      const registry = createRegistry();
+
+      const eventGraph = createGraph('elem1', 'event', 'user-created', 'Crm');
+      eventGraph.targets.push({
+        id: 'info-other-slice',
+        type: 'information',
+        name: 'user',
+        context: 'Crm',
+        chapterId: 'chapter1'
+      });
+
+      const input: PlanInput = {
+        slice: {id: 'slice1', chapterId: 'chapter1'},
+        elements: [createElement('elem1', 'event', 'user-created', 'Crm', 0)],
+        graphs: new Map([['elem1', eventGraph]]),
+        registry
+      };
+
+      const result = plan(input);
+      const infoAction = result.actions.find(a => a.kind === 'information' && a.name === 'User');
+      const prjcaseAction = result.actions.find(a => a.kind === 'prjcase' && a.name === 'User');
+      expect(infoAction).toBeDefined();
+      expect(prjcaseAction).toBeDefined();
+      expect(result.actions.indexOf(infoAction!)).toBeLessThan(result.actions.indexOf(prjcaseAction!));
+    });
+
+    it('should not re-generate the information when the counterpart is registered', () => {
+      const registry = createRegistry();
+      registry.informationFolders.add('Crm.User');
+
+      const eventGraph = createGraph('elem1', 'event', 'user-created', 'Crm');
+      eventGraph.targets.push({
+        id: 'info-other-slice',
+        type: 'information',
+        name: 'user',
+        context: 'Crm',
+        chapterId: 'chapter1'
+      });
+
+      const input: PlanInput = {
+        slice: {id: 'slice1', chapterId: 'chapter1'},
+        elements: [createElement('elem1', 'event', 'user-created', 'Crm', 0)],
+        graphs: new Map([['elem1', eventGraph]]),
+        registry
+      };
+
+      const result = plan(input);
+      expect(result.actions.find(a => a.kind === 'information' && a.name === 'User')).toBeUndefined();
+      expect(result.actions.find(a => a.kind === 'prjcase' && a.name === 'User')).toBeDefined();
+    });
+
     it('should block prjcase when cross-context', () => {
       const registry = createRegistry();
 
@@ -665,6 +745,35 @@ describe('Planner', () => {
       expect(jobAction).toBeDefined();
     });
 
+    it('should block job when information and automation are in different contexts', () => {
+      const registry = createRegistry();
+
+      const infoGraph = createGraph('elem1', 'information', 'todo-list', 'Crm');
+      infoGraph.targets.push({
+        id: 'auto-elem',
+        type: 'automation',
+        name: 'process-todo',
+        context: 'Other',
+        chapterId: 'chapter1'
+      });
+
+      const input: PlanInput = {
+        slice: {id: 'slice1', chapterId: 'chapter1'},
+        elements: [
+          createElement('elem1', 'information', 'todo-list', 'Crm', 0),
+          createElement('elem2', 'automation', 'process-todo', 'Other', 1)
+        ],
+        graphs: new Map([['elem1', infoGraph]]),
+        registry
+      };
+
+      const result = plan(input);
+      const blockedAction = result.actions.find(a => a.kind === 'blocked' && a.name === 'ProcessTodo');
+      expect(blockedAction).toBeDefined();
+      expect(blockedAction!.reason).toBe('information and automation must be in the same context');
+      expect(result.actions.find(a => a.kind === 'job')).toBeUndefined();
+    });
+
     it('should generate both on and job when automation has both sources', () => {
       const registry = createRegistry();
 
@@ -786,6 +895,38 @@ describe('Planner', () => {
       const result = plan(input);
       const knownAction = result.actions.find(a => a.kind === 'known' && a.name === 'CreateUser');
       expect(knownAction).toBeDefined();
+    });
+
+    it('should set commentTarget to the counterpart element with its own chapterId', () => {
+      const registry = createRegistry();
+
+      // The information counterpart lives in another chapter; the prjcase
+      // comment must be posted there, not in the triggering chapter.
+      const eventGraph = createGraph('elem1', 'event', 'user-created', 'Crm');
+      eventGraph.targets.push({
+        id: 'info-other-chapter',
+        type: 'information',
+        name: 'user',
+        context: 'Crm',
+        chapterId: 'chapter-2'
+      });
+
+      const input: PlanInput = {
+        slice: {id: 'slice1', chapterId: 'chapter1'},
+        elements: [createElement('elem1', 'event', 'user-created', 'Crm', 0)],
+        graphs: new Map([['elem1', eventGraph]]),
+        registry
+      };
+
+      const result = plan(input);
+      const prjcaseAction = result.actions.find(a => a.kind === 'prjcase');
+      expect(prjcaseAction).toBeDefined();
+      expect(prjcaseAction!.commentTarget).toEqual({
+        elementId: 'info-other-chapter',
+        chapterId: 'chapter-2',
+        sliceId: undefined,
+        chapterName: undefined
+      });
     });
   });
 
