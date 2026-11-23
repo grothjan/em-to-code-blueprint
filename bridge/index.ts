@@ -27,6 +27,7 @@ import { createCodegenRunner } from './codegen-runner.js';
 import { parseInvocation, printHelp } from './config.js';
 import { run } from './run.js';
 import { readRegistrySnapshot } from '../lib/helpers/registry-reader.js';
+import { getDomainPath } from '../bin/scanner.js';
 import type { Logger, RegistryReader } from './model.js';
 
 // ---------------------------------------------------------------------------
@@ -50,13 +51,13 @@ const logger: Logger = {
 };
 
 // ---------------------------------------------------------------------------
-// Registry reader (lazy; reads from process.cwd() as the codegen does)
+// Registry reader (lazy; reads <cwd>/src/domain, the same path the codegen uses)
 // ---------------------------------------------------------------------------
 
 function makeRegistryReader(): RegistryReader {
   return {
     read() {
-      return readRegistrySnapshot(process.cwd());
+      return readRegistrySnapshot(getDomainPath());
     },
   };
 }
